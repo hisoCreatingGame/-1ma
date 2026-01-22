@@ -65,12 +65,12 @@ public class MahjongGameManager : MonoBehaviour
     {
         IsGameStarted = false;
         
-        // 既存プレイヤーとその手牌を完全に削除
+        // ★修正: 既存プレイヤーとその手牌を完全に削除
         foreach(var p in connectedPlayers) 
         {
             if(p != null) 
             {
-                p.DespawnAllTiles();
+                p.DespawnAllTiles(); // ★重要: プレイヤーが持っている牌を削除
                 Destroy(p.gameObject);
             }
         }
@@ -82,26 +82,19 @@ public class MahjongGameManager : MonoBehaviour
         MahjongPlayer mp = pObj.GetComponent<MahjongPlayer>();
         
         mp.Initialize(0, true);
+        
+        // 現在の持ち点をプレイヤーに適用（引継ぎ）
         mp.Score = CurrentScore;
         
         connectedPlayers.Add(mp);
 
-        // ★デッキ生成（デバッグモード対応）
         CreateDeck();
 
         deadWall.Clear();
         doraIndicatorIndices.Clear();
         uraDoraIndicatorIndices.Clear();
 
-        // デッキ枚数が王牌設定数より少ない場合の安全策
         int deadCount = config.DeadWallCount;
-        if (deck.Count < deadCount + config.HandTileCount)
-        {
-            Debug.LogWarning($"Deck count ({deck.Count}) is very low for Debug Mode. Adjusting dead wall.");
-            // デッキが極端に少ない場合（字牌モードなど）は、王牌を減らして最低限ツモれるようにする
-            deadCount = Mathf.Max(0, deck.Count - config.HandTileCount - 4); 
-        }
-
         if (deck.Count >= deadCount)
         {
             for (int i = 0; i < deadCount; i++)
@@ -112,9 +105,7 @@ public class MahjongGameManager : MonoBehaviour
             }
         }
 
-        // ドラ表示牌の設定（王牌がある場合のみ）
-        if (deadWall.Count > 4) doraIndicatorIndices.Add(4);
-        
+        doraIndicatorIndices.Add(4);
         SpawnVisualWall();
 
         if (gameTable != null) gameTable.ClearTable();
@@ -129,11 +120,17 @@ public class MahjongGameManager : MonoBehaviour
         StartCoroutine(NextDrawRoutine());
     }
 
+    /// <summary>
+    /// UIから「Next Round」が押されたときに呼ばれる
+    /// </summary>
     public void ProceedToNextRound()
     {
+        // 親（自分）が上がったので連荘（本場加算）
         HonbaCount++;
         RoundCount++;
+        
         Debug.Log($"Proceeding to Round {RoundCount}, Honba {HonbaCount}");
+        
         StartRound();
     }
 
@@ -176,6 +173,7 @@ public class MahjongGameManager : MonoBehaviour
     {
         yield return new WaitForSeconds(0.4f);
         
+        // 山がなくなったら流局（ゲームオーバー）処理へ
         if (deck.Count <= 0) 
         { 
             Debug.Log("流局（山なし）");
@@ -187,15 +185,22 @@ public class MahjongGameManager : MonoBehaviour
         SpawnAndGiveTsumo(player);
     }
 
+    /// <summary>
+    /// 流局時の処理
+    /// </summary>
     private void OnRyuukyoku()
     {
         IsGameStarted = false;
+        
+        // 現在のスコアを更新
         if (connectedPlayers.Count > 0)
         {
             CurrentScore = connectedPlayers[0].Score;
         }
+
         Debug.Log("Game Over: Ryuukyoku");
         
+        // Canvasに通知してゲームオーバー画面を表示
         var canvas = FindAnyObjectByType<MahjongCanvas>();
         if (canvas != null)
         {
@@ -233,6 +238,7 @@ public class MahjongGameManager : MonoBehaviour
         int[] uraIds = GetDoraIds(true);
         string yakuStr = string.Join(" / ", result.YakuList);
         
+        // スコアを加算して管理変数更新
         winner.Score += result.TotalScore; 
         CurrentScore = winner.Score;       
 
@@ -284,6 +290,7 @@ public class MahjongGameManager : MonoBehaviour
         context.IsTsumo = true;   
         context.IsDealer = true;  
         context.IsMenzen = true; 
+        
         context.SeatWind = 0;     
 
         context.IsRiichi = player.IsRiichi;
@@ -347,57 +354,16 @@ public class MahjongGameManager : MonoBehaviour
         if (tileObj != null) player.AddTileToHand(tileObj);
     }
 
-    // ★重要: デバッグモードに対応したデッキ生成
     private void CreateDeck()
     {
         deck.Clear();
-
-        // 0-8: Manzu, 9-17: Pinzu, 18-26: Sozu, 27-33: Honors
         for (int i = 0; i < 34; i++)
         {
             bool isTarget = false;
-
-            switch (config.DeckMode)
-            {
-                case DebugDeckMode.Normal:
-                    if (i >= 0 && i <= 8) isTarget = config.UseManzu;
-                    else if (i >= 9 && i <= 17) isTarget = config.UsePinzu;
-                    else if (i >= 18 && i <= 26) isTarget = config.UseSozu;
-                    else if (i >= 27 && i <= 33) isTarget = config.UseHonors;
-                    break;
-
-                case DebugDeckMode.Chinitsu:
-                    // 指定された色のみ
-                    if (config.ChinitsuSuit == TileSuit.Manzu && i >= 0 && i <= 8) isTarget = true;
-                    else if (config.ChinitsuSuit == TileSuit.Pinzu && i >= 9 && i <= 17) isTarget = true;
-                    else if (config.ChinitsuSuit == TileSuit.Sozu && i >= 18 && i <= 26) isTarget = true;
-                    break;
-
-                case DebugDeckMode.JihaiOnly:
-                    // 字牌(27-33)のみ
-                    if (i >= 27 && i <= 33) isTarget = true;
-                    break;
-
-                case DebugDeckMode.TanyaoOnly:
-                    // 2-8の数牌のみ (字牌NG、1,9 NG)
-                    if (i >= 27) isTarget = false; // 字牌
-                    else
-                    {
-                        int num = i % 9; // 0=1, 8=9
-                        if (num != 0 && num != 8) isTarget = true;
-                    }
-                    break;
-
-                case DebugDeckMode.YaochuOnly:
-                    // 1,9,字牌のみ
-                    if (i >= 27) isTarget = true; // 字牌
-                    else
-                    {
-                        int num = i % 9;
-                        if (num == 0 || num == 8) isTarget = true;
-                    }
-                    break;
-            }
+            if (i >= 0 && i <= 8) isTarget = config.UseManzu;
+            else if (i >= 9 && i <= 17) isTarget = config.UsePinzu;
+            else if (i >= 18 && i <= 26) isTarget = config.UseSozu;
+            else if (i >= 27 && i <= 33) isTarget = config.UseHonors;
 
             if (!isTarget) continue;
 
@@ -413,8 +379,6 @@ public class MahjongGameManager : MonoBehaviour
                 deck.Add(tileToAdd);
             }
         }
-        
-        // シャッフル
         var r = new System.Random();
         int n = deck.Count;
         while (n > 1)
@@ -425,8 +389,6 @@ public class MahjongGameManager : MonoBehaviour
             deck[k] = deck[n];
             deck[n] = v;
         }
-
-        Debug.Log($"[Deck Created] Mode: {config.DeckMode}, Tiles: {deck.Count}");
     }
 
     private int DrawTileFromDeck()
@@ -495,6 +457,7 @@ public class MahjongGameManager : MonoBehaviour
         }
     }
     
+    // デバッグ用: リスタートはNewGame扱いにする
     public void RequestDebugRestart() { StartNewGame(); }
 
     private void RevealUraDoraIndices()
