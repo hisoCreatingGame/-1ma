@@ -19,11 +19,6 @@ public class StartSceneController : MonoBehaviour
     {
         yield return new WaitForSeconds(1.0f);
 
-        startAnimator.SetTrigger("Play");
-
-        // This length is the video "StartGameAnim" 's length
-        yield return new WaitForSeconds(2.0f);
-
-        SceneManager.LoadScene("SampleScene");
+        SceneManager.LoadScene("LobbyScene");
     }
 }

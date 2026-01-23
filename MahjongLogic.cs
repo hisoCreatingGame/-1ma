@@ -40,25 +40,25 @@ public static class MahjongLogic
 
         // --- 役満チェック ---
         if (CheckTenhouChiihou(yakumanList, ref yakumanHan, context)) { }
-        if (CheckDaisangen(tiles, melds)) { yakumanHan += 13; yakumanList.Add("Dai San Gen"); }
+        if (CheckDaisangen(tiles, melds)) { yakumanHan += 13; yakumanList.Add("DaiSanGen"); }
         if (context.IsMenzen)
         {
             int suuankouType = GetSuuankouType(structure, context);
-            if (suuankouType == 2) { yakumanHan += 26; yakumanList.Add("Su Anko単騎"); }
-            else if (suuankouType == 1) { yakumanHan += 13; yakumanList.Add("Su Anko"); }
+            if (suuankouType == 2) { yakumanHan += 26; yakumanList.Add("SuTan"); }
+            else if (suuankouType == 1) { yakumanHan += 13; yakumanList.Add("SuAnko"); }
         }
-        if (CheckTsuuissou(tiles, melds)) { yakumanHan += 13; yakumanList.Add("Tsu Iso"); }
-        if (CheckRyuuiisou(tiles, melds)) { yakumanHan += 13; yakumanList.Add("Ryu Iso"); }
-        if (CheckChinroutou(structure, melds)) { yakumanHan += 13; yakumanList.Add("Chin Ro To"); }
+        if (CheckTsuuissou(tiles, melds)) { yakumanHan += 13; yakumanList.Add("TsuIso"); }
+        if (CheckRyuuiisou(tiles, melds)) { yakumanHan += 13; yakumanList.Add("RyuIso"); }
+        if (CheckChinroutou(structure, melds)) { yakumanHan += 13; yakumanList.Add("ChinRoTo"); }
         int sushiHan = CheckSuushi(tiles, melds);
-        if (sushiHan == 2) { yakumanHan += 26; yakumanList.Add("Dai Sushi"); }
-        else if (sushiHan == 1) { yakumanHan += 13; yakumanList.Add("Sho Sushi"); }
-        if (melds != null && melds.Count / 4 == 4) { yakumanHan += 13; yakumanList.Add("Su Kantsu四槓子"); }
+        if (sushiHan == 2) { yakumanHan += 26; yakumanList.Add("DaiSushi"); }
+        else if (sushiHan == 1) { yakumanHan += 13; yakumanList.Add("ShoSushi"); }
+        if (melds != null && melds.Count / 4 == 4) { yakumanHan += 13; yakumanList.Add("SuKantsu"); } // 四槓子"); }
         if (context.IsMenzen && CheckChinitsu(tiles, melds))
         {
             int chuurenType = GetChuurenType(tiles, context.WinningTileId);
-            if (chuurenType == 2) { yakumanHan += 26; yakumanList.Add("純正九蓮宝燈"); }
-            else if (chuurenType == 1) { yakumanHan += 13; yakumanList.Add("九蓮宝燈"); }
+            if (chuurenType == 2) { yakumanHan += 26; yakumanList.Add("JunseiChurenPoto"); } //純正九蓮宝燈"); }
+            else if (chuurenType == 1) { yakumanHan += 13; yakumanList.Add("ChurenPoto"); } //九蓮宝燈"); }
         }
 
         // ★追加: トリガーによる特別役満の判定
@@ -68,7 +68,7 @@ public static class MahjongLogic
             if (context.SpecialYakuTriggers.Contains("CENTER_CHUN"))
             {
                 yakumanHan += 13;
-                yakumanList.Add("Man Naka TSUYOSHI");
+                yakumanList.Add("ManNakaTSUYOSHI");
                 Debug.Log("Chun is Man Naka");
             }
             else Debug.Log("Chun Is not Man Naka");
@@ -127,7 +127,7 @@ public static class MahjongLogic
         han += doraCount;
 
         // ★追加: トリガーによる通常役(翻数アップ)の判定
-        if (context.SpecialYakuTriggers != null)
+        if (context.SpecialYakuTriggers != null && false)
         {
             // 例: 右端が白なら +2翻
             if (context.SpecialYakuTriggers.Contains("RIGHT_HAKU"))
@@ -170,11 +170,11 @@ public static class MahjongLogic
         {
             ScoringResult res = new ScoringResult();
             bool is13Wait = IsKokushi13Wait(tiles, context.WinningTileId);
-            if (is13Wait) { res.Han = 26; res.ScoreName = "double Yakuman"; res.YakuList.Add("Kokushi 13 Men"); }
-            else { res.Han = 13; res.ScoreName = "Yakuman"; res.YakuList.Add("Kokushi Musou"); }
+            if (is13Wait) { res.Han = 26; res.ScoreName = "double Yakuman"; res.YakuList.Add("Kokushi13Men"); }
+            else { res.Han = 13; res.ScoreName = "Yakuman"; res.YakuList.Add("KokushiMusou"); }
             CheckTenhouChiihou(res.YakuList, ref res.Han, context);
             CalculatePoints(res, context.IsDealer);
-            res.DebugInfo = "Kokushi Musou";
+            res.DebugInfo = "KokushiMusou";
             return res;
         }
 

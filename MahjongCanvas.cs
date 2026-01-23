@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections;
-using UnityEngine.SceneManagement; // ★追加: シーン遷移に必要
+using UnityEngine.SceneManagement;
 using unityroom.Api; 
 
 public class MahjongCanvas : MonoBehaviour
@@ -29,10 +29,10 @@ public class MahjongCanvas : MonoBehaviour
     [Header("Game Over UI")]
     public GameObject gameOverPanel; 
     public TMP_Text finalScoreText;  
-    public TMP_Text totalCumulativeText; 
+    public TMP_Text totalCumulativeText; // ★名称はそのままですが、中身は役満数を表示します
     public Button retryButton;       
     public Button sendRankingButton; 
-    public Button finishButton; // ★追加: タイトルへ戻るボタン
+    public Button finishButton; 
 
     private MahjongPlayer _localPlayer;
 
@@ -44,13 +44,10 @@ public class MahjongCanvas : MonoBehaviour
     public Sprite[] tileSprites; 
     public Sprite tileBackSprite;
 
-    // スコア管理用キー
-    private const string PREF_KEY_TOTAL_SCORE = "TotalAccumulatedScore";
     private int _lastFinalScore = 0;
 
     private void Start()
     {
-        // アクションボタン
         if (riichiButton != null) riichiButton.onClick.AddListener(OnRiichiClicked);
         if (kanButton != null)    kanButton.onClick.AddListener(OnKanClicked);
         if (winButton != null)    winButton.onClick.AddListener(OnWinClicked);
@@ -59,16 +56,12 @@ public class MahjongCanvas : MonoBehaviour
         if (debugDealButton != null)   debugDealButton.onClick.AddListener(OnDebugDealClicked);
         if (ronButton != null) ronButton.onClick.AddListener(OnRonClicked);
 
-        // 結果画面ボタン
         if (nextRoundButton != null) nextRoundButton.onClick.AddListener(OnNextRoundClicked);
 
-        // ゲームオーバー画面ボタン
         if (retryButton != null) retryButton.onClick.AddListener(OnRetryClicked);
         if (sendRankingButton != null) sendRankingButton.onClick.AddListener(OnSendRankingClicked);
-        // ★追加: Finishボタン（タイトルへ）
         if (finishButton != null) finishButton.onClick.AddListener(OnFinishClicked);
 
-        // 初期非表示
         if (riichiButton != null) riichiButton.gameObject.SetActive(false);
         if (kanButton != null)    kanButton.gameObject.SetActive(false);
         if (winButton != null)    winButton.gameObject.SetActive(false);
@@ -94,9 +87,7 @@ public class MahjongCanvas : MonoBehaviour
 
     private void UpdateActionButtons()
     {
-        // 自分のターンかどうか
         bool isMyTurn = (MahjongGameManager.Instance != null && MahjongGameManager.Instance.CurrentTurnSeat == _localPlayer.Seat);
-        // ゲーム中のみボタンを表示
         bool isGameActive = MahjongGameManager.Instance.IsGameStarted;
 
         if (!isGameActive)
@@ -185,16 +176,15 @@ public class MahjongCanvas : MonoBehaviour
 
         _lastFinalScore = finalScore;
 
-        int oldTotal = PlayerPrefs.GetInt(PREF_KEY_TOTAL_SCORE, 0);
-        int newTotal = oldTotal + finalScore; 
-        PlayerPrefs.SetInt(PREF_KEY_TOTAL_SCORE, newTotal);
-        PlayerPrefs.Save();
-
         if (finalScoreText != null) 
             finalScoreText.text = $"Game Over\nFinal Score: <color=yellow>{finalScore}</color>";
         
-        if (totalCumulativeText != null)
-            totalCumulativeText.text = $"Lifetime Total Score: {newTotal}";
+        // ★修正: 累積スコアではなく、解除済みの役満数を表示
+        if (totalCumulativeText != null && MahjongGameManager.Instance != null)
+        {
+            int yakumanCount = MahjongGameManager.Instance.GetUnlockedYakumanCount();
+            totalCumulativeText.text = $"Yakuman Collection: <color=orange>{yakumanCount} / 15</color>";
+        }
 
         gameOverPanel.SetActive(true);
         if (resultPanel != null) resultPanel.SetActive(false); 
@@ -366,20 +356,27 @@ public class MahjongCanvas : MonoBehaviour
 
     private void OnSendRankingClicked()
     {
-        int totalAccumulated = PlayerPrefs.GetInt(PREF_KEY_TOTAL_SCORE, 0);
+        // ★修正: ボード2に「役満の解除数」を送信するように変更
+        int yakumanCount = 0;
+        if (MahjongGameManager.Instance != null)
+        {
+            yakumanCount = MahjongGameManager.Instance.GetUnlockedYakumanCount();
+        }
 
         UnityroomApiClient.Instance.SendScore(1, _lastFinalScore, ScoreboardWriteMode.HighScoreDesc);
-        UnityroomApiClient.Instance.SendScore(2, totalAccumulated, ScoreboardWriteMode.HighScoreDesc);
+        UnityroomApiClient.Instance.SendScore(2, yakumanCount, ScoreboardWriteMode.HighScoreDesc); // ここが変更点
         
-        Debug.Log($"Sent Scores -> Board 1: {_lastFinalScore}, Board 2: {totalAccumulated}");
+        Debug.Log($"Sent Scores -> Board 1: {_lastFinalScore}, Board 2 (Yakuman): {yakumanCount}");
 
         if (sendRankingButton != null) sendRankingButton.interactable = false;
     }
 
-    // ★追加: FinishボタンでStartSceneへ
     private void OnFinishClicked()
     {
-        // "StartScene" という名前のシーンをロードします
+        Time.timeScale = 1f;
+
+        Debug.Log("OnFinishClicked : Go to StartScene");
+
         SceneManager.LoadScene("StartScene");
     }
 }

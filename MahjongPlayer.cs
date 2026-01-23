@@ -128,6 +128,30 @@ public class MahjongPlayer : MonoBehaviour
         UpdateTilePositions();
     }
 
+    public void DespawnAllTiles()
+    {
+        // 手牌の削除
+        foreach (var tile in HandTiles)
+        {
+            if (tile != null && tile.gameObject != null) Destroy(tile.gameObject);
+        }
+        HandTiles.Clear();
+
+        // 鳴き牌の削除
+        foreach (var tile in MeldTiles)
+        {
+            if (tile != null && tile.gameObject != null) Destroy(tile.gameObject);
+        }
+        MeldTiles.Clear();
+
+        // ツモ牌の削除
+        if (TsumoTile != null && TsumoTile.gameObject != null)
+        {
+            Destroy(TsumoTile.gameObject);
+            TsumoTile = null;
+        }
+    }
+
     private void CheckCurrentTriggers()
     {
         // セットをクリアして再評価
@@ -538,14 +562,6 @@ public List<string> GetActiveTriggersForWin()
         _isHandDirty = true; 
     }
 
-    public void DespawnAllTiles()
-    {
-        foreach (var tile in HandTiles) if (tile != null) Destroy(tile.gameObject);
-        HandTiles.Clear();
-        if (TsumoTile != null) { Destroy(TsumoTile.gameObject); TsumoTile = null; }
-        foreach (var tile in MeldTiles) if (tile != null) Destroy(tile.gameObject);
-        MeldTiles.Clear();
-    }
 
     public int GetRedDoraCount()
     {
