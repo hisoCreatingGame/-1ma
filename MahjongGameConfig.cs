@@ -34,7 +34,7 @@ public class MahjongGameConfig : ScriptableObject
     public int HandTileCount = 13;
 
     [Header("Score Settings")]
-    public int InitialScore = 25000;
+    public int InitialScore = 0;
 
     [Header("Wall Settings")]
     [Tooltip("山を表示するかどうか")]

@@ -26,7 +26,6 @@ public class MahjongPlayer : MonoBehaviour
     public bool IsAutoSortEnabled { get; set; } = false;
     public bool CanRon { get; private set; } = false;
     public int CurrentShanten { get; private set; } = 8;
-
     
     public bool IsHuman = false;
 
@@ -53,10 +52,14 @@ public class MahjongPlayer : MonoBehaviour
     private int _discardCount = 0;
 
     private MahjongTile _hoveredTile;
-    private const float HoverYOffset = 0.5f; // �z�o�[���ɏグ�鍂��
+    private const float HoverYOffset = 0.5f; 
 
     private HashSet<MahjongTile> _validRiichiDiscardTiles = new HashSet<MahjongTile>();
 
+    // ★追加: リーチ時の待ち牌キャッシュ
+    private List<int> _cachedRiichiWaits = null;
+
+    private Dictionary<MahjongTile, List<int>> _cachedDiscardWaitMap = new Dictionary<MahjongTile, List<int>>();
     public void Initialize(int seatIndex, bool isHuman)
     {
         Seat = seatIndex;
@@ -68,13 +71,14 @@ public class MahjongPlayer : MonoBehaviour
         }
         else
         {
-            Score = 25000;
+            Score = 0;
         }
 
         _discardCount = 0;
         IsDoubleRiichi = false;
         IsIppatsuChance = false;
         _isFirstTurn = true;
+        _cachedRiichiWaits = null; // 初期化
         
         float dist = 40f;
         if (seatIndex == 0)
@@ -135,31 +139,6 @@ public class MahjongPlayer : MonoBehaviour
         UpdateTilePositions();
     }
 
-    // ==========================================================================================
-    //  修正: OnTileHoverEnter
-    //  平常時は表示せず、リーチ宣言待機中のみ受け入れ（待ち）を表示するように条件を追加
-    // ==========================================================================================
-    public void OnTileHoverEnter(MahjongTile tile)
-    {
-        if (!IsHuman) return;
-        if (IsRiichi) return; 
-        
-        _hoveredTile = tile;
-        _isHandDirty = true; 
-
-        // ★修正: 「リーチ宣言待機中」かつ「アシスト設定ON」の場合のみ表示
-        if (MahjongGameManager.Instance != null && 
-            MahjongGameManager.Instance.config.ShowUkeireAssist &&
-            IsRiichiPending) 
-        {
-             CalculateAndShowUkeire(tile);
-        }
-    }
-
-    // ==========================================================================================
-    //  修正: RequestDiscard
-    //  リーチ確定時の待ち表示ロジックを修正
-    // ==========================================================================================
     public void RequestDiscard(MahjongTile tileObj)
     {
         _discardCount++;
@@ -174,12 +153,17 @@ public class MahjongPlayer : MonoBehaviour
             if (_discardCount == 1 && MeldTiles.Count == 0) IsDoubleRiichi = true;
             isDeclaringRiichi = true; 
 
-            // ★修正: UpdateRiichiWaitDisplay() は手牌14枚で計算してしまい結果が空になるため廃止。
-            // 代わりに CalculateAndShowUkeire を使い、「この牌を切った後の待ち」を正しく表示して維持する。
+            // ★修正: リーチ確定時、待ちを計算してキャッシュに保存し、UI表示を行う
+            // 毎回計算するのではなく、ここで確定させる
+            List<int> finalWaits = CalculateWaitsAfterDiscard(tileObj);
+            _cachedRiichiWaits = finalWaits; // キャッシュ保存
+
+            // UI表示 (アシストONなら)
             if (MahjongGameManager.Instance != null && 
                 MahjongGameManager.Instance.config.ShowUkeireAssist)
             {
-                CalculateAndShowUkeire(tileObj);
+                var canvas = FindAnyObjectByType<MahjongCanvas>();
+                if (canvas != null) canvas.ShowUkeirePanel(finalWaits);
             }
         }
         else if (IsRiichi)
@@ -199,10 +183,20 @@ public class MahjongPlayer : MonoBehaviour
         }
     }
 
-    // ==========================================================================================
-    //  修正: SetRiichiPending
-    //  キャンセル時にパネルを閉じる処理を追加
-    // ==========================================================================================
+    // ★追加: 特定の牌を切った後の待ち牌リストを計算して返すヘルパー
+    private List<int> CalculateWaitsAfterDiscard(MahjongTile discardTile)
+    {
+        // 手牌(14枚)から対象を抜いて、残り13枚での待ちを計算
+        int[] counts = new int[34];
+        foreach (var t in HandTiles) if(t && t != discardTile) counts[GetNormalizedTileId(t.TileId)]++;
+        if (TsumoTile && TsumoTile != discardTile) counts[GetNormalizedTileId(TsumoTile.TileId)]++;
+        
+        // 赤ドラなどは正規化済みIDに加算されている前提
+        
+        int meldCount = MeldTiles.Count / 4;
+        return MahjongLogic.GetEffectiveTiles(counts, meldCount);
+    }
+
     public void SetRiichiPending(bool pending)
     {
         if (IsHuman && !IsRiichi) 
@@ -211,83 +205,137 @@ public class MahjongPlayer : MonoBehaviour
 
             if (pending)
             {
-                CalculateValidRiichiDiscards();
+                // ★ここで「どの牌を切れるか」＋「その時の待ちは何か」を一括計算してキャッシュする
+                PrecalculateRiichiCandidatesAndWait();
+                
+                // ビジュアル更新（暗くする処理）
                 UpdateRiichiSelectionVisuals();
-                // 待機開始直後は、まだどの牌もホバーしていないのでパネルは出さない（ユーザーの操作待ち）
             }
             else
             {
+                // キャンセル時
                 ResetTileVisuals();
-                // ★追加: キャンセル時はパネルを隠す
                 var canvas = FindAnyObjectByType<MahjongCanvas>();
                 if (canvas != null) canvas.HideUkeirePanel();
+                
+                // キャッシュクリア
+                _cachedDiscardWaitMap.Clear();
             }
         }
     }
-    // ==========================================================================================
-    //  既存メソッドの修正: RequestDiscard
-    // ==========================================================================================
 
-    // ==========================================================================================
-    //  既存メソッドの修正: SetRiichiPending
-    // ==========================================================================================
-
-    // ==========================================================================================
-    //  新規追加メソッド: リーチ時に切れる牌（テンパイ維持）の計算
-    // ==========================================================================================
-    private void CalculateValidRiichiDiscards()
+    private void PrecalculateRiichiCandidatesAndWait()
     {
         _validRiichiDiscardTiles.Clear();
+        _cachedDiscardWaitMap.Clear();
 
-        // 1. 現在の全手牌カウント（正規化ID 0-33）を作成
-        int[] counts = new int[34];
+        // 1. 現在の手牌構成（14枚）のカウント配列を作成
+        int[] totalCounts = new int[34];
         foreach (var t in HandTiles) 
         {
-            if(t != null) counts[GetNormalizedTileId(t.TileId)]++;
+            if(t != null) totalCounts[GetNormalizedTileId(t.TileId)]++;
         }
         if (TsumoTile != null) 
         {
-            counts[GetNormalizedTileId(TsumoTile.TileId)]++;
+            totalCounts[GetNormalizedTileId(TsumoTile.TileId)]++;
         }
         
         int meldCount = MeldTiles.Count / 4;
 
-        // 2. 手牌の各牌についてシミュレーション
+        // 2. 手牌の各牌について「これを切ったらどうなるか？」をシミュレーション
         foreach (var tile in HandTiles)
         {
-            if(CheckDiscardForTenpai(tile, counts, meldCount)) _validRiichiDiscardTiles.Add(tile);
+            CalculateAndCacheWait(tile, totalCounts, meldCount);
         }
 
-        // 3. ツモ牌についてシミュレーション
+        // 3. ツモ牌についても同様に
         if (TsumoTile != null)
         {
-             if(CheckDiscardForTenpai(TsumoTile, counts, meldCount)) _validRiichiDiscardTiles.Add(TsumoTile);
+            CalculateAndCacheWait(TsumoTile, totalCounts, meldCount);
         }
     }
 
-    // ==========================================================================================
-    //  新規追加メソッド: 特定の牌を切った場合にテンパイするか判定
-    // ==========================================================================================
+    // ★追加ヘルパー: 指定した牌を切った場合の待ちを計算し、有効ならキャッシュに登録
+    private void CalculateAndCacheWait(MahjongTile discardCandidate, int[] totalCounts, int meldCount)
+    {
+        int tid = GetNormalizedTileId(discardCandidate.TileId);
+        
+        // カウント配列から一時的に減らす（打牌シミュレーション）
+        if (tid < 34 && totalCounts[tid] > 0)
+        {
+            totalCounts[tid]--;
+
+            // この状態で有効牌（待ち）があるか計算
+            // GetEffectiveTiles はシャンテン数が下がる牌を返すが、
+            // テンパイ時(シャンテン0)にこれを呼ぶと「上がり牌(-1になる牌)」が返ってくる仕様を利用
+            
+            // まずテンパイしているか(シャンテン0以下か)を確認
+            int shanten = MahjongLogic.CalculateShanten(totalCounts, meldCount);
+            
+            if (shanten <= 0)
+            {
+                // テンパイ（または既に上がっている）なら、待ち牌を取得
+                List<int> waits = MahjongLogic.GetEffectiveTiles(totalCounts, meldCount);
+                
+                if (waits != null && waits.Count > 0)
+                {
+                    // 有効なリーチ打牌として登録
+                    _validRiichiDiscardTiles.Add(discardCandidate);
+                    
+                    // ★待ちリストをキャッシュに保存
+                    _cachedDiscardWaitMap[discardCandidate] = waits;
+                }
+            }
+
+            totalCounts[tid]++; // 配列を元に戻す
+        }
+    }
+
+
     private bool CheckDiscardForTenpai(MahjongTile tile, int[] counts, int meldCount)
     {
         int tid = GetNormalizedTileId(tile.TileId);
-        // countsは正規化IDで管理されているため、そのままインデックスとして使用
         if(tid < 34 && counts[tid] > 0)
         {
-            counts[tid]--; // 仮に切る
+            counts[tid]--; 
             int shanten = MahjongLogic.CalculateShanten(counts, meldCount);
-            counts[tid]++; // 戻す
-            
-            // 0はテンパイ。
-            // 稀ですが「リーチ宣言牌で上がる（-1）」場合もルール上打牌は可能なので許可します。
+            counts[tid]++; 
             return (shanten <= 0); 
         }
         return false;
     }
 
-    // ==========================================================================================
-    //  新規追加メソッド: 牌の表示更新（無効牌を暗くする）
-    // ==========================================================================================
+    public void OnTileHoverEnter(MahjongTile tile)
+    {
+        if (!IsHuman) return;
+        if (IsRiichi) return; 
+        
+        _hoveredTile = tile;
+        _isHandDirty = true; 
+
+        // リーチ宣言待機中、かつアシストONの場合
+        if (IsRiichiPending &&
+            MahjongGameManager.Instance != null && 
+            MahjongGameManager.Instance.config.ShowUkeireAssist)
+        {
+             // ★修正: 計算せず、キャッシュから取得して表示
+             if (_cachedDiscardWaitMap.ContainsKey(tile))
+             {
+                 var waits = _cachedDiscardWaitMap[tile];
+                 var canvas = FindAnyObjectByType<MahjongCanvas>();
+                 if (canvas != null)
+                 {
+                     canvas.ShowUkeirePanel(waits);
+                 }
+             }
+             else
+             {
+                 // 有効な打牌ではない（テンパイしない）場合はパネルを消す
+                 var canvas = FindAnyObjectByType<MahjongCanvas>();
+                 if (canvas != null) canvas.HideUkeirePanel();
+             }
+        }
+    }
     private void UpdateRiichiSelectionVisuals()
     {
         foreach(var tile in HandTiles)
@@ -297,67 +345,15 @@ public class MahjongPlayer : MonoBehaviour
         if(TsumoTile) TsumoTile.SetDarkened(!_validRiichiDiscardTiles.Contains(TsumoTile));
     }
 
-    // ==========================================================================================
-    //  新規追加メソッド: 牌の表示リセット（すべて明るくする）
-    // ==========================================================================================
     private void ResetTileVisuals()
     {
         foreach(var tile in HandTiles) if(tile) tile.SetDarkened(false);
         if(TsumoTile) TsumoTile.SetDarkened(false);
     }
-/*/
-    public void RequestDiscard(MahjongTile tileObj)
-    {
-        _discardCount++;
-        bool isDeclaringRiichi = false; 
 
-        if (IsRiichiPending)
-        {
-            IsRiichi = true;
-            IsIppatsuChance = true; 
-            if (_discardCount == 1 && MeldTiles.Count == 0) IsDoubleRiichi = true;
-            isDeclaringRiichi = true; 
-
-            // ���ǉ�: ���[�`�錾�m��A�҂���\��
-            UpdateRiichiWaitDisplay();
-        }
-        else if (IsRiichi)
-        {
-            IsIppatsuChance = false;
-        }
-
-        _isFirstTurn = false;
-        _isRinshanChance = false;
-        IsRiichiPending = false;
-        
-        if (MahjongGameManager.Instance != null)
-        {
-            MahjongGameManager.Instance.OnDiscardRequested(this, tileObj, isDeclaringRiichi);
-        }
-    }
-/*/
-
-    // ���ǉ�: ���[�`���̑҂��\���X�V���\�b�h
     public void UpdateRiichiWaitDisplay()
     {
-        // ��v13���ł̑҂����v�Z���ĕ\��
-        int[] tileCounts = new int[34];
-        foreach (var t in HandTiles)
-        {
-            if(t == null) continue;
-            int tid = GetNormalizedTileId(t.TileId);
-            if (tid < 34) tileCounts[tid]++;
-        }
-
-        int meldCount = MeldTiles.Count / 4;
-        List<int> winningTiles = MahjongLogic.GetWinningTiles(tileCounts, meldCount);
-
-        // Canvas�ɕ\���˗��i������UkeirePanel�𗬗p�j
-        var canvas = FindAnyObjectByType<MahjongCanvas>();
-        if (canvas != null)
-        {
-            canvas.ShowUkeirePanel(winningTiles); 
-        }
+        // 廃止（RequestDiscard内で直接処理するため）
     }
 
     public void PerformAnkan(int tileType)
@@ -459,16 +455,27 @@ public class MahjongPlayer : MonoBehaviour
 
         if (IsRiichi && AvailableAnkanTiles.Count > 0)
         {
-            int[] hand13Counts = new int[34];
-            foreach (var tile in HandTiles)
+            // ★修正: リーチ中の暗槓チェックで、キャッシュがあればそれを利用して計算をスキップ
+            List<int> waitsBefore;
+
+            if (_cachedRiichiWaits != null)
             {
-                if(tile)
-                {
-                    int tid = GetNormalizedTileId(tile.TileId);
-                    if (tid < 34) hand13Counts[tid]++;
-                }
+                waitsBefore = _cachedRiichiWaits;
             }
-            List<int> waitsBefore = MahjongLogic.GetWinningTiles(hand13Counts, meldCount);
+            else
+            {
+                // 万が一キャッシュがない場合は計算（通常通らない）
+                int[] hand13Counts = new int[34];
+                foreach (var tile in HandTiles)
+                {
+                    if(tile)
+                    {
+                        int tid = GetNormalizedTileId(tile.TileId);
+                        if (tid < 34) hand13Counts[tid]++;
+                    }
+                }
+                waitsBefore = MahjongLogic.GetWinningTiles(hand13Counts, meldCount);
+            }
 
             List<int> toRemove = new List<int>();
 
@@ -579,29 +586,40 @@ public class MahjongPlayer : MonoBehaviour
         IsFuriten = false;
         CurrentWaitingTiles.Clear();
 
-        int[] tileCounts = new int[34];
-        foreach (var tile in HandTiles)
+        // ★修正: リーチ中かつキャッシュがあればそれを使う（重い計算をスキップ）
+        if (IsRiichi && _cachedRiichiWaits != null)
         {
-            if(tile == null) continue;
-            int tid = GetNormalizedTileId(tile.TileId);
-            if (tid >= 0 && tid < 34) tileCounts[tid]++;
+            CurrentWaitingTiles = new List<int>(_cachedRiichiWaits);
+        }
+        else
+        {
+            // 通常の計算
+            int[] tileCounts = new int[34];
+            foreach (var tile in HandTiles)
+            {
+                if(tile == null) continue;
+                int tid = GetNormalizedTileId(tile.TileId);
+                if (tid >= 0 && tid < 34) tileCounts[tid]++;
+            }
+
+            int meldCount = MeldTiles.Count / 4;
+            int shanten13 = MahjongLogic.CalculateShanten(tileCounts, meldCount);
+
+            if (shanten13 == 0)
+            {
+                CurrentWaitingTiles = MahjongLogic.GetWinningTiles(tileCounts, meldCount);
+            }
         }
 
-        int meldCount = MeldTiles.Count / 4;
-        int shanten13 = MahjongLogic.CalculateShanten(tileCounts, meldCount);
-
-        if (shanten13 == 0)
+        // 共通のフリテンチェック処理
+        foreach (var waitingTile in CurrentWaitingTiles)
         {
-            CurrentWaitingTiles = MahjongLogic.GetWinningTiles(tileCounts, meldCount);
-            foreach (var waitingTile in CurrentWaitingTiles)
+            if (waitingTile >= 0 && waitingTile < 37)
             {
-                if (waitingTile >= 0 && waitingTile < 37)
+                if (CheckIfDiscarded(waitingTile))
                 {
-                    if (CheckIfDiscarded(waitingTile))
-                    {
-                        IsFuriten = true;
-                        break;
-                    }
+                    IsFuriten = true;
+                    break;
                 }
             }
         }
@@ -630,7 +648,6 @@ public class MahjongPlayer : MonoBehaviour
     public void AddToDiscardHistory(int tileId) { DiscardHistory.Add(tileId); }
     public void ClearDiscardHistory() { DiscardHistory.Clear(); }
 
-
     public void OnTileHoverExit(MahjongTile tile)
     {
         if (_hoveredTile == tile)
@@ -645,29 +662,8 @@ public class MahjongPlayer : MonoBehaviour
 
     private void CalculateAndShowUkeire(MahjongTile discardCandidate)
     {
-        int[] tileCounts14 = new int[37];
-        foreach (var t in HandTiles) if(t) tileCounts14[t.TileId]++;
-        if (TsumoTile) tileCounts14[TsumoTile.TileId]++;
-
-        int discardId = GetNormalizedTileId(discardCandidate.TileId);
-        if (tileCounts14[discardId] > 0)
-        {
-            tileCounts14[discardId]--;
-        }
-        else
-        {
-            return; 
-        }
-        
-        int[] counts34 = new int[34];
-        for(int i=0; i<34; i++) counts34[i] = tileCounts14[i];
-        if(tileCounts14[34] > 0) counts34[4] += tileCounts14[34];
-        if(tileCounts14[35] > 0) counts34[13] += tileCounts14[35];
-        if(tileCounts14[36] > 0) counts34[22] += tileCounts14[36];
-
-        int meldCount = MeldTiles.Count / 4;
-        
-        List<int> effectiveTiles = MahjongLogic.GetEffectiveTiles(counts34, meldCount);
+        // UI表示用のヘルパー
+        List<int> effectiveTiles = CalculateWaitsAfterDiscard(discardCandidate);
 
         var canvas = FindAnyObjectByType<MahjongCanvas>();
         if (canvas != null)
@@ -680,11 +676,9 @@ public class MahjongPlayer : MonoBehaviour
     {
         if (HandTiles.Count == 0 && TsumoTile == null && MeldTiles.Count == 0) return;
 
-        // ��v�̕�
         float handWidth = 0f;
         if (HandTiles.Count > 0) handWidth += HandTiles.Count * tileWidth;
 
-        // �t�[���v�̕�
         float meldsWidth = 0f;
         int meldSetCount = MeldTiles.Count / 4;
         if (meldSetCount > 0)
@@ -692,7 +686,6 @@ public class MahjongPlayer : MonoBehaviour
             meldsWidth += MeldTiles.Count * tileWidth;
         }
 
-        // �S�̂̕��v�Z
         float totalVisualWidth = handWidth;
         float tsumoSlotSize = tsumoGap + tileWidth;
 
@@ -704,12 +697,10 @@ public class MahjongPlayer : MonoBehaviour
         float startX = -totalVisualWidth / 2.0f + (tileWidth / 2.0f);
         float currentX = startX;
 
-        // 1. ��v�z�u
         for (int i = 0; i < HandTiles.Count; i++)
         {
             if(HandTiles[i] != null)
             {
-                // ���C��: �������Z�𖳌������Ĉʒu���Œ肷��
                 var rb = HandTiles[i].GetComponent<Rigidbody>();
                 if (rb != null)
                 {
@@ -725,10 +716,8 @@ public class MahjongPlayer : MonoBehaviour
             currentX += tileWidth;
         }
 
-        // 2. �c���v�z�u
         if (TsumoTile != null)
         {
-            // ���C��: �������Z������
             var rb = TsumoTile.GetComponent<Rigidbody>();
             if (rb != null)
             {
@@ -740,7 +729,6 @@ public class MahjongPlayer : MonoBehaviour
             MoveTileToTarget(TsumoTile, startX + handWidth + tsumoGap, yPos, false, false);
         }
 
-        // 3. �t�[���v�z�u
         if (meldSetCount > 0)
         {
             float meldStartX = startX + handWidth + tsumoSlotSize + meldGap;
@@ -757,7 +745,6 @@ public class MahjongPlayer : MonoBehaviour
                     {
                         var tileObj = MeldTiles[tileIndex];
                         
-                        // ���C��: �t�[���v���������Z������
                         var rb = tileObj.GetComponent<Rigidbody>();
                         if (rb != null)
                         {
@@ -861,19 +848,11 @@ public class MahjongPlayer : MonoBehaviour
     public void StartDraggingTile(MahjongTile tile) { if(IsHuman) { _draggingTile = tile; _isHandDirty = true; } }
     public void StopDraggingTile(MahjongTile tile) { if (_draggingTile == tile) _draggingTile = null; }
 
-    /*/
-    public void SetRiichiPending(bool pending)
-    {
-        if (IsHuman && !IsRiichi) IsRiichiPending = pending;
-    }
-    /*/
-
     public void OnAnyMeldOccurred()
     {
         IsIppatsuChance = false;
         _isFirstTurn = false;
     }
-
 
     public void CheckRonAvailability()
     {
