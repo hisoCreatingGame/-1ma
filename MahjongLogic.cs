@@ -7,7 +7,7 @@ using System.Text;
 public static class MahjongLogic
 {
     // ==========================================================================================
-    //  1. シャンテン数計算
+    //  1. シャンテン数計算 (変更なし)
     // ==========================================================================================
     public static int CalculateShanten(int[] tiles, int meldCount = 0)
     {
@@ -28,7 +28,95 @@ public static class MahjongLogic
     // ==========================================================================================
     //  2. 点数計算メインメソッド
     // ==========================================================================================
-    // ==========================================================================================
+    
+    public static ScoringResult CalculateScore(int[] tiles, List<int> melds, ScoringContext context)
+    {
+        List<ScoringResult> candidates = new List<ScoringResult>();
+
+        // --- 国士無双チェック ---
+        if (context.IsMenzen && CheckKokushi(tiles))
+        {
+            ScoringResult res = new ScoringResult();
+            bool is13Wait = IsKokushi13Wait(tiles, context.WinningTileId);
+            
+            // 天和・地和チェック
+            int yakumanHan = 0;
+            if (CheckTenhouChiihou(res.YakuList, ref yakumanHan, context)) { }
+
+            if (is13Wait) 
+            { 
+                // ダブル役満級は200翻として扱う（通常役より優先するため）
+                res.Han = 200 + yakumanHan; 
+                res.ScoreName = "double Yakuman"; 
+                res.YakuList.Add("Kokushi13Men"); 
+            }
+            else 
+            { 
+                // シングル役満級は100翻として扱う
+                res.Han = 100 + yakumanHan; 
+                res.ScoreName = "Yakuman"; 
+                res.YakuList.Add("KokushiMusou"); 
+            }
+            
+            CalculatePoints(res, context.IsDealer);
+            res.DebugInfo = "KokushiMusou";
+            candidates.Add(res); // 候補に追加
+        }
+
+        // --- 七対子チェック ---
+        if (context.IsMenzen && CheckChiitoitsu(tiles))
+        {
+            ScoringResult chiitoiRes = new ScoringResult();
+            CalculateChiitoiNormal(tiles, context, chiitoiRes);
+            CalculatePoints(chiitoiRes, context.IsDealer);
+            candidates.Add(chiitoiRes);
+        }
+
+        // --- 通常面子手チェック ---
+        int meldCount = (melds != null) ? melds.Count / 4 : 0;
+        var allStructures = DecomposeHandAllPatterns(tiles, meldCount);
+
+        if (allStructures.Count > 0)
+        {
+            foreach (var structure in allStructures)
+            {
+                ScoringResult normalRes = new ScoringResult();
+                CalculateNormalYaku(structure, tiles, melds, context, normalRes);
+                CalculatePoints(normalRes, context.IsDealer);
+                candidates.Add(normalRes);
+            }
+        }
+        else if (candidates.Count == 0)
+        {
+            // 面子手分解できず、国士や七対子でもない場合
+            ScoringResult err = new ScoringResult();
+            err.YakuList.Add("形式エラー(No Mentsu)");
+            return err;
+        }
+
+        if (candidates.Count == 0)
+        {
+            ScoringResult err = new ScoringResult();
+            err.YakuList.Add("役なし");
+            err.DebugInfo = "No Yaku Found";
+            return err;
+        }
+
+        // --- 最も高い点数の結果を採用 ---
+        // Hanの大きさで降順ソートすることで、意図的に大きくした役満(100翻~)を優先させる
+        var bestResult = candidates.OrderByDescending(r => r.TotalScore)
+                                   .ThenByDescending(r => r.Han) 
+                                   .ThenByDescending(r => r.Fu)
+                                   .First();
+
+        if (bestResult.TotalScore == 0 && bestResult.YakuList.Count == 0)
+        {
+            bestResult.YakuList.Add("役なし");
+        }
+
+        return bestResult;
+    }
+
     private static void CalculateNormalYaku(List<int> structure, int[] tiles, List<int> melds, ScoringContext context, ScoringResult result)
     {
         int han = 0;
@@ -36,10 +124,15 @@ public static class MahjongLogic
         StringBuilder sb = new StringBuilder(); 
 
         List<string> yakumanList = new List<string>();
-        int yakumanHan = 0;
+        int yakumanHan = 0; // 内部計算用の役満倍数（13単位）
 
         // --- 役満チェック ---
-        if (CheckTenhouChiihou(yakumanList, ref yakumanHan, context)) { }
+        // 天和・地和
+        if (CheckTenhouChiihou(yakumanList, ref yakumanHan, context)) 
+        {
+            Debug.Log("NormalYaku Route: Tenhou/Chiihou Detected");
+        }
+        
         if (CheckDaisangen(tiles, melds)) { yakumanHan += 13; yakumanList.Add("DaiSanGen"); }
         if (context.IsMenzen)
         {
@@ -53,34 +146,35 @@ public static class MahjongLogic
         int sushiHan = CheckSuushi(tiles, melds);
         if (sushiHan == 2) { yakumanHan += 26; yakumanList.Add("DaiSushi"); }
         else if (sushiHan == 1) { yakumanHan += 13; yakumanList.Add("ShoSushi"); }
-        if (melds != null && melds.Count / 4 == 4) { yakumanHan += 13; yakumanList.Add("SuKantsu"); } // 四槓子"); }
+        if (melds != null && melds.Count / 4 == 4) { yakumanHan += 13; yakumanList.Add("SuKantsu"); }
         if (context.IsMenzen && CheckChinitsu(tiles, melds))
         {
             int chuurenType = GetChuurenType(tiles, context.WinningTileId);
-            if (chuurenType == 2) { yakumanHan += 26; yakumanList.Add("JunseiChurenPoto"); } //純正九蓮宝燈"); }
-            else if (chuurenType == 1) { yakumanHan += 13; yakumanList.Add("ChurenPoto"); } //九蓮宝燈"); }
+            if (chuurenType == 2) { yakumanHan += 26; yakumanList.Add("JunseiChurenPoto"); } 
+            else if (chuurenType == 1) { yakumanHan += 13; yakumanList.Add("ChurenPoto"); }
         }
 
-        // ★追加: トリガーによる特別役満の判定
+        // トリガー役満
         if (context.SpecialYakuTriggers != null)
         {
-            // 例: 左端が中なら役満とする場合
             if (context.SpecialYakuTriggers.Contains("CENTER_CHUN"))
             {
                 yakumanHan += 13;
                 yakumanList.Add("ManNakaTSUYOSHI");
-                Debug.Log("Chun is Man Naka");
             }
-            else Debug.Log("Chun Is not Man Naka");
         }
 
         if (yakumanHan > 0)
         {
-            result.Han = yakumanHan;
-            result.ScoreName = (yakumanHan >= 26) ? "ダブル役満" : "役満";
+            // ★修正: 役満確定時は、Hanを「100 * (yakumanHan/13)」にして通常役（最大でも30翻程度）より強制的に大きくする
+            // これにより、BestResult選択時に確実に役満が選ばれるようにする
+            int multiplier = yakumanHan / 13;
+            result.Han = 100 * multiplier;
+            
+            result.ScoreName = (result.Han >= 200) ? "ダブル役満" : "役満";
             result.YakuList = yakumanList;
-            result.DebugInfo = "Yakuman!";
-            return;
+            result.DebugInfo = "Yakuman Detected!";
+            return; // ここでリターンして通常役計算を行わない
         }
 
         // --- 通常役チェック ---
@@ -126,23 +220,6 @@ public static class MahjongLogic
         int doraCount = CountTotalDora(tiles, melds, context, yakus, sb);
         han += doraCount;
 
-        // ★追加: トリガーによる通常役(翻数アップ)の判定
-        if (context.SpecialYakuTriggers != null && false)
-        {
-            // 例: 右端が白なら +2翻
-            if (context.SpecialYakuTriggers.Contains("RIGHT_HAKU"))
-            {
-                han += 2;
-                yakus.Add("White Border (白界)");
-            }
-            // 例: 索子染めハンド（実際の清一色とは別に追加ボーナスなど）
-            if (context.SpecialYakuTriggers.Contains("ALL_SOZU_HAND"))
-            {
-                han += 1;
-                yakus.Add("Forest Blessing (森の加護)");
-            }
-        }
-
         result.Han = han;
         result.YakuList = yakus;
 
@@ -162,75 +239,48 @@ public static class MahjongLogic
         sb.AppendLine($"Han: {han}, Fu: {result.Fu}, Yaku: {string.Join(",", yakus)}");
         result.DebugInfo = sb.ToString();
     }
-    public static ScoringResult CalculateScore(int[] tiles, List<int> melds, ScoringContext context)
-    {
-        List<ScoringResult> candidates = new List<ScoringResult>();
-
-        if (context.IsMenzen && CheckKokushi(tiles))
-        {
-            ScoringResult res = new ScoringResult();
-            bool is13Wait = IsKokushi13Wait(tiles, context.WinningTileId);
-            if (is13Wait) { res.Han = 26; res.ScoreName = "double Yakuman"; res.YakuList.Add("Kokushi13Men"); }
-            else { res.Han = 13; res.ScoreName = "Yakuman"; res.YakuList.Add("KokushiMusou"); }
-            CheckTenhouChiihou(res.YakuList, ref res.Han, context);
-            CalculatePoints(res, context.IsDealer);
-            res.DebugInfo = "KokushiMusou";
-            return res;
-        }
-
-        if (context.IsMenzen && CheckChiitoitsu(tiles))
-        {
-            ScoringResult chiitoiRes = new ScoringResult();
-            CalculateChiitoiNormal(tiles, context, chiitoiRes);
-            CalculatePoints(chiitoiRes, context.IsDealer);
-            candidates.Add(chiitoiRes);
-        }
-
-        int meldCount = (melds != null) ? melds.Count / 4 : 0;
-        var allStructures = DecomposeHandAllPatterns(tiles, meldCount);
-
-        if (allStructures.Count == 0 && candidates.Count == 0)
-        {
-            ScoringResult err = new ScoringResult();
-            err.YakuList.Add("形式エラー(No Mentsu)");
-            return err;
-        }
-
-        foreach (var structure in allStructures)
-        {
-            ScoringResult normalRes = new ScoringResult();
-            CalculateNormalYaku(structure, tiles, melds, context, normalRes);
-            CalculatePoints(normalRes, context.IsDealer);
-            candidates.Add(normalRes);
-        }
-
-        if (candidates.Count == 0)
-        {
-            ScoringResult err = new ScoringResult();
-            err.YakuList.Add("役なし");
-            err.DebugInfo = "No Yaku Found";
-            return err;
-        }
-
-        var bestResult = candidates.OrderByDescending(r => r.TotalScore)
-                                   .ThenByDescending(r => r.Han)
-                                   .ThenByDescending(r => r.Fu)
-                                   .First();
-
-        if (bestResult.TotalScore == 0 && bestResult.YakuList.Count == 0)
-        {
-            bestResult.YakuList.Add("役なし");
-        }
-
-        return bestResult;
-    }
 
     // ==========================================================================================
-    //  3. 一般手の役判定ロジック
+    //  3. 七対子 / 天和判定追加
     // ==========================================================================================
 
     private static void CalculateChiitoiNormal(int[] tiles, ScoringContext context, ScoringResult result)
     {
+        // ★修正: 七対子ルートでも天和・地和チェックを行う
+        List<string> yakumanList = new List<string>();
+        int yakumanHan = 0;
+        
+        // 天和・地和
+        if (CheckTenhouChiihou(yakumanList, ref yakumanHan, context))
+        {
+            Debug.Log("Chiitoi Route: Tenhou/Chiihou Detected");
+        }
+        
+        // トリガー役満
+        if (context.SpecialYakuTriggers != null)
+        {
+            if (context.SpecialYakuTriggers.Contains("CENTER_CHUN"))
+            {
+                yakumanHan += 13;
+                yakumanList.Add("ManNakaTSUYOSHI");
+            }
+        }
+        
+        // 字一色(七対子形)チェック
+        if (CheckTsuuissou(tiles, null)) { yakumanHan += 13; yakumanList.Add("TsuIso"); }
+
+        if (yakumanHan > 0)
+        {
+            // 役満成立時は強制的に高翻数にしてリターン
+            int multiplier = yakumanHan / 13;
+            result.Han = 100 * multiplier;
+            result.ScoreName = (result.Han >= 200) ? "ダブル役満" : "役満";
+            result.YakuList = yakumanList;
+            result.DebugInfo = "Chiitoi Yakuman!";
+            return;
+        }
+
+        // --- 以下、通常の七対子計算 ---
         int han = 2;
         List<string> yakus = new List<string> { "ChiToitsu" };
         StringBuilder sb = new StringBuilder();
@@ -253,6 +303,10 @@ public static class MahjongLogic
         result.YakuList = yakus;
         result.DebugInfo = "Chiitoitsu " + sb.ToString();
     }
+
+    // ==========================================================================================
+    //  補助メソッド
+    // ==========================================================================================
 
     private static bool CheckPinfu(List<int> structure, ScoringContext ctx)
     {
@@ -287,70 +341,53 @@ public static class MahjongLogic
         return isRyanmen;
     }
 
-    private static List<List<int>> DecomposeHandAllPatterns(int[] tiles, int meldCount)
+    // --- DecomposeHandAllPatterns, SearchMentsu, RunSearch, CountTotalDora, CalculateFu ---
+    // (これらは元のロジックのままでOKですが、変更がないため省略します。元のファイルを維持してください)
+    
+    // 省略部分に必要なメソッドのシグネチャのみ記載（コンパイルエラー回避のため、実際は元のコードを維持）
+    private static List<List<int>> DecomposeHandAllPatterns(int[] tiles, int meldCount) 
     {
+        // 元のコードを維持
         var allPatterns = new List<List<int>>();
         int[] workTiles = (int[])tiles.Clone();
-
         int targetGroupCount = 5 - meldCount;
-        for (int i = 0; i < 34; i++)
-        {
-            if (workTiles[i] >= 2)
-            {
+        for (int i = 0; i < 34; i++) {
+            if (workTiles[i] >= 2) {
                 workTiles[i] -= 2; 
-
                 List<int> currentStructure = new List<int>();
                 currentStructure.Add(i); 
-
                 SearchMentsu(workTiles, 0, currentStructure, allPatterns, targetGroupCount);
-
                 workTiles[i] += 2; 
             }
         }
         return allPatterns;
     }
-
+    
     private static void SearchMentsu(int[] tiles, int currentIdx, List<int> currentStructure, List<List<int>> results, int targetGroupCount)
     {
-        if (currentStructure.Count == targetGroupCount) 
-        {
+         // 元のコードを維持
+        if (currentStructure.Count == targetGroupCount) {
             bool empty = true;
             for (int i = 0; i < 34; i++) if (tiles[i] > 0) { empty = false; break; }
-
-            if (empty)
-            {
-                results.Add(new List<int>(currentStructure));
-            }
+            if (empty) results.Add(new List<int>(currentStructure));
             return;
         }
-
         if (currentIdx >= 34) return;
-
-        if (tiles[currentIdx] == 0)
-        {
+        if (tiles[currentIdx] == 0) {
             SearchMentsu(tiles, currentIdx + 1, currentStructure, results, targetGroupCount);
             return;
         }
-
-        if (tiles[currentIdx] >= 3)
-        {
+        if (tiles[currentIdx] >= 3) {
             tiles[currentIdx] -= 3;
             currentStructure.Add(currentIdx + 1000); 
-
             SearchMentsu(tiles, currentIdx, currentStructure, results, targetGroupCount); 
-
             currentStructure.RemoveAt(currentStructure.Count - 1);
             tiles[currentIdx] += 3;
         }
-
-        if (currentIdx < 27 && currentIdx % 9 < 7 &&
-            tiles[currentIdx] > 0 && tiles[currentIdx + 1] > 0 && tiles[currentIdx + 2] > 0)
-        {
+        if (currentIdx < 27 && currentIdx % 9 < 7 && tiles[currentIdx] > 0 && tiles[currentIdx + 1] > 0 && tiles[currentIdx + 2] > 0) {
             tiles[currentIdx]--; tiles[currentIdx + 1]--; tiles[currentIdx + 2]--;
             currentStructure.Add(currentIdx); 
-
             SearchMentsu(tiles, currentIdx, currentStructure, results, targetGroupCount); 
-
             currentStructure.RemoveAt(currentStructure.Count - 1);
             tiles[currentIdx]++; tiles[currentIdx + 1]++; tiles[currentIdx + 2]++;
         }
@@ -376,54 +413,44 @@ public static class MahjongLogic
 
     private static int RunSearch(int[] tiles, int mentsu, int tatsu, int currentIdx, bool hasHead)
     {
-        if (currentIdx >= 34)
-        {
+        if (currentIdx >= 34) {
             if (mentsu + tatsu > 4) tatsu = 4 - mentsu;
             int headValue = hasHead ? 1 : 0;
             return 8 - (mentsu * 2) - tatsu - headValue;
         }
-
         int best = 8;
-        if (tiles[currentIdx] >= 3)
-        {
+        if (tiles[currentIdx] >= 3) {
             tiles[currentIdx] -= 3;
             best = Math.Min(best, RunSearch(tiles, mentsu + 1, tatsu, currentIdx, hasHead));
             tiles[currentIdx] += 3;
         }
-        if (currentIdx < 27 && tiles[currentIdx] > 0 && tiles[currentIdx + 1] > 0 && tiles[currentIdx + 2] > 0)
-        {
+        if (currentIdx < 27 && tiles[currentIdx] > 0 && tiles[currentIdx + 1] > 0 && tiles[currentIdx + 2] > 0) {
             bool borderCheck = true;
             if (currentIdx % 9 > 6) borderCheck = false;
-            if (borderCheck)
-            {
+            if (borderCheck) {
                 tiles[currentIdx]--; tiles[currentIdx + 1]--; tiles[currentIdx + 2]--;
                 best = Math.Min(best, RunSearch(tiles, mentsu + 1, tatsu, currentIdx, hasHead));
                 tiles[currentIdx]++; tiles[currentIdx + 1]++; tiles[currentIdx + 2]++;
             }
         }
-        if (tiles[currentIdx] >= 2)
-        {
+        if (tiles[currentIdx] >= 2) {
             tiles[currentIdx] -= 2;
             best = Math.Min(best, RunSearch(tiles, mentsu, tatsu + 1, currentIdx, hasHead));
             tiles[currentIdx] += 2;
         }
-        if (currentIdx < 27 && tiles[currentIdx] > 0 && tiles[currentIdx + 1] > 0)
-        {
+        if (currentIdx < 27 && tiles[currentIdx] > 0 && tiles[currentIdx + 1] > 0) {
             bool borderCheck = true;
             if (currentIdx % 9 == 8) borderCheck = false;
-            if (borderCheck)
-            {
+            if (borderCheck) {
                 tiles[currentIdx]--; tiles[currentIdx + 1]--;
                 best = Math.Min(best, RunSearch(tiles, mentsu, tatsu + 1, currentIdx, hasHead));
                 tiles[currentIdx]++; tiles[currentIdx + 1]++;
             }
         }
-        if (currentIdx < 27 && tiles[currentIdx] > 0 && tiles[currentIdx + 2] > 0)
-        {
+        if (currentIdx < 27 && tiles[currentIdx] > 0 && tiles[currentIdx + 2] > 0) {
             bool borderCheck = true;
             if (currentIdx % 9 > 6) borderCheck = false;
-            if (borderCheck)
-            {
+            if (borderCheck) {
                 tiles[currentIdx]--; tiles[currentIdx + 2]--;
                 best = Math.Min(best, RunSearch(tiles, mentsu, tatsu + 1, currentIdx, hasHead));
                 tiles[currentIdx]++; tiles[currentIdx + 2]++;
@@ -435,6 +462,7 @@ public static class MahjongLogic
 
     private static int CountTotalDora(int[] tiles, List<int> melds, ScoringContext ctx, List<string> yakuList, StringBuilder sb)
     {
+        // 元のコードを維持
         int totalDora = 0;
         int omote = 0;
         sb.Append(" [Omote Dora] ");
@@ -462,15 +490,14 @@ public static class MahjongLogic
             sb.AppendLine($" -> {ura}");
             if (ura > 0) { totalDora += ura; yakuList.Add($"UraDora {ura}"); }
         }
-
         if (ctx.RedDoraCount > 0) { totalDora += ctx.RedDoraCount; yakuList.Add($"RedDora {ctx.RedDoraCount}"); }
         if (ctx.NukiDoraCount > 0) { totalDora += ctx.NukiDoraCount; yakuList.Add($"NukiDora {ctx.NukiDoraCount}"); }
-
         return totalDora;
     }
 
     private static int CalculateFu(List<int> structure, int[] tiles, List<int> melds, ScoringContext ctx)
     {
+        // 元のコードを維持
         int fu = 20;
         if (ctx.IsTsumo) fu += 2;
         else if (ctx.IsMenzen) fu += 10;
@@ -510,31 +537,56 @@ public static class MahjongLogic
 
     private static void CalculatePoints(ScoringResult res, bool isDealer)
     {
+        // ★修正: 100翻以上なら役満として点数を固定
+        if (res.Han >= 100)
+        {
+            int multiplier = res.Han / 100; // 100なら1倍、200なら2倍
+            int basicPoints = 8000 * multiplier;
+            
+            if (isDealer)
+            {
+                res.PayRon = RoundUp100(basicPoints * 6);
+                int payAll = RoundUp100(basicPoints * 2);
+                res.PayTsumoChild = payAll;
+                res.PayTsumoDealer = 0;
+                res.TotalScore = (res.PayRon > 0) ? res.PayRon : payAll * 3;
+            }
+            else
+            {
+                res.PayRon = RoundUp100(basicPoints * 4);
+                res.PayTsumoDealer = RoundUp100(basicPoints * 2);
+                res.PayTsumoChild = RoundUp100(basicPoints * 1);
+                res.TotalScore = (res.PayRon > 0) ? res.PayRon : (res.PayTsumoDealer + res.PayTsumoChild * 2);
+            }
+            return;
+        }
+
+        // 通常の点数計算
         if (res.Han == 0) return;
         if (res.Fu < 20) res.Fu = 20;
-        int basicPoints = res.Fu * (int)Math.Pow(2, 2 + res.Han);
-        if (basicPoints > 2000 || res.Han >= 5)
+        int basicP = res.Fu * (int)Math.Pow(2, 2 + res.Han);
+        if (basicP > 2000 || res.Han >= 5)
         {
-            if (res.Han >= 13) { basicPoints = 8000; res.ScoreName = "Yakuman"; }
-            else if (res.Han >= 11) { basicPoints = 6000; res.ScoreName = "SanBaiman"; }
-            else if (res.Han >= 8) { basicPoints = 4000; res.ScoreName = "Baiman"; }
-            else if (res.Han >= 6) { basicPoints = 3000; res.ScoreName = "Haneman"; }
-            else { basicPoints = 2000; res.ScoreName = "Mangan"; }
+            if (res.Han >= 13) { basicP = 8000; res.ScoreName = "Yakuman"; }
+            else if (res.Han >= 11) { basicP = 6000; res.ScoreName = "SanBaiman"; }
+            else if (res.Han >= 8) { basicP = 4000; res.ScoreName = "Baiman"; }
+            else if (res.Han >= 6) { basicP = 3000; res.ScoreName = "Haneman"; }
+            else { basicP = 2000; res.ScoreName = "Mangan"; }
         }
 
         if (isDealer)
         {
-            res.PayRon = RoundUp100(basicPoints * 6);
-            int payAll = RoundUp100(basicPoints * 2);
+            res.PayRon = RoundUp100(basicP * 6);
+            int payAll = RoundUp100(basicP * 2);
             res.PayTsumoChild = payAll;
             res.PayTsumoDealer = 0;
             res.TotalScore = (res.PayRon > 0) ? res.PayRon : payAll * 3;
         }
         else
         {
-            res.PayRon = RoundUp100(basicPoints * 4);
-            res.PayTsumoDealer = RoundUp100(basicPoints * 2);
-            res.PayTsumoChild = RoundUp100(basicPoints * 1);
+            res.PayRon = RoundUp100(basicP * 4);
+            res.PayTsumoDealer = RoundUp100(basicP * 2);
+            res.PayTsumoChild = RoundUp100(basicP * 1);
             res.TotalScore = (res.PayRon > 0) ? res.PayRon : (res.PayTsumoDealer + res.PayTsumoChild * 2);
         }
     }
@@ -601,7 +653,19 @@ public static class MahjongLogic
 
     private static bool CheckKokushi(int[] t) { return CalculateKokushiShanten(t) == -1; }
     private static bool CheckChiitoitsu(int[] t) { return CalculateChitoitsuShanten(t) == -1; }
-    private static bool CheckTenhouChiihou(List<string> l, ref int h, ScoringContext c) { if (c.IsFirstTurn && c.IsTsumo) { h = 13; l.Add(c.IsDealer ? "Tenho" : "Chiho"); return true; } return false; }
+    
+    // ★修正: 天和・地和の判定メソッド。YakumanHanを加算する仕様に統一。
+    private static bool CheckTenhouChiihou(List<string> l, ref int h, ScoringContext c) 
+    { 
+        if (c.IsFirstTurn && c.IsTsumo) 
+        { 
+            h += 13; 
+            l.Add(c.IsDealer ? "Tenho" : "Chiho"); 
+            return true; 
+        } 
+        return false; 
+    }
+    
     private static bool CheckDaisangen(int[] t, List<int> m) { return HasTriplet(t, m, 31) && HasTriplet(t, m, 32) && HasTriplet(t, m, 33); }
     private static bool CheckTsuuissou(int[] t, List<int> m) { for (int i = 0; i < 27; i++) if (t[i] > 0) return false; return true; }
     private static bool CheckRyuuiisou(int[] t, List<int> m) { int[] g = { 19, 20, 21, 23, 25, 32 }; for (int i = 0; i < 34; i++) { if (t[i] > 0 && !Array.Exists(g, x => x == i)) return false; } if (m != null) foreach (int x in m) if (!Array.Exists(g, v => v == x)) return false; return true; }
@@ -744,5 +808,32 @@ public static class MahjongLogic
             else if (t[i] >= 2) pr++;
         }
         return (tr == 2 && pr == 1);
+    }
+    public static List<int> GetEffectiveTiles(int[] tiles13, int meldCount)
+    {
+        List<int> effectiveTiles = new List<int>();
+        
+        // 現在のシャンテン数を計算
+        int currentShanten = CalculateShanten(tiles13, meldCount);
+
+        // 34種の牌すべてについて、1枚加えてシャンテン数が下がるか試す
+        for (int i = 0; i < 34; i++)
+        {
+            // 既に4枚使い切っている牌は有効牌になり得ない（空想上はなるが、物理的に引けない）
+            // ここでは純粋な牌理として、4枚使い切りチェックはあえてせず「形として有効か」を判定します
+            
+            tiles13[i]++;
+            int nextShanten = CalculateShanten(tiles13, meldCount);
+            tiles13[i]--;
+
+            // シャンテン数が減る（例: 1シャンテン -> 0シャンテン(テンパイ)）
+            // または、テンパイ(0) -> 上がり(-1) になる場合
+            if (nextShanten < currentShanten)
+            {
+                effectiveTiles.Add(i);
+            }
+        }
+        
+        return effectiveTiles;
     }
 }

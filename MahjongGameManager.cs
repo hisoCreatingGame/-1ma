@@ -317,7 +317,7 @@ public class MahjongGameManager : MonoBehaviour
         }
     }
 
-    private ScoringResult RecalculateForPayment(MahjongPlayer player)
+private ScoringResult RecalculateForPayment(MahjongPlayer player)
     {
         int[] tileCounts = new int[37];
         foreach (var t in player.HandTiles) if(t) tileCounts[t.TileId]++;
@@ -330,12 +330,20 @@ public class MahjongGameManager : MonoBehaviour
         
         context.IsTsumo = true;   
         context.IsDealer = true;  
-        context.IsMenzen = true; 
+        context.IsMenzen = true; // 暗槓のみのゲーム仕様のため常にメンゼン
         context.SeatWind = 0;     
 
+        // ★追加修正: プレイヤーから1巡目フラグと一発フラグを受け取る
+        context.IsFirstTurn = player.IsFirstTurn; 
+        
+        // ついでに一発やリンシャンなども念のためContextに正しく反映させます（元コードで一部欠けていた場合のため）
         context.IsRiichi = player.IsRiichi;
         context.IsDoubleRiichi = player.IsDoubleRiichi;
+        context.IsIppatsu = player.IsIppatsuChance; // プレイヤーのフラグを使用
         
+        // 注: リンシャンについてはMahjongPlayer側で _isRinshanChance を公開する必要がありますが、
+        // 今回の天和修正には IsFirstTurn が最重要です。
+
         context.DoraTiles = GetDoraList();
         if (player.IsRiichi) context.UraDoraTiles = GetUraDoraList();
         context.RedDoraCount = player.GetRedDoraCount();

@@ -3,7 +3,8 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections;
 using UnityEngine.SceneManagement;
-using unityroom.Api; 
+using unityroom.Api;
+using System.Collections.Generic;
 
 public class MahjongCanvas : MonoBehaviour
 {
@@ -29,7 +30,7 @@ public class MahjongCanvas : MonoBehaviour
     [Header("Game Over UI")]
     public GameObject gameOverPanel; 
     public TMP_Text finalScoreText;  
-    public TMP_Text totalCumulativeText; // ★名称はそのままですが、中身は役満数を表示します
+    public TMP_Text totalCumulativeText; 
     public Button retryButton;       
     public Button sendRankingButton; 
     public Button finishButton; 
@@ -45,6 +46,10 @@ public class MahjongCanvas : MonoBehaviour
     public Sprite tileBackSprite;
 
     private int _lastFinalScore = 0;
+    
+    [Header("Assist UI")]
+    public GameObject ukeirePanel;      // 表示用の親パネル
+    public Transform ukeireGrid;        // 牌画像を並べる親オブジェクト
 
     private void Start()
     {
@@ -170,6 +175,25 @@ public class MahjongCanvas : MonoBehaviour
         resultPanel.SetActive(true);
     }
 
+    public void ShowRyuukyoku(bool isTenpai, int currentScore)
+    {
+        if (resultText == null || resultPanel == null) return;
+
+        string title = isTenpai ? "<color=green>RYUUKYOKU (Tenpai)</color>" : "<color=red>RYUUKYOKU (No-ten)</color>";
+        string info = isTenpai ? "Safe! You can proceed to next round." : "Game Over...";
+
+        resultText.text = $"{title}\n\n{info}\n\n" +
+                          $"<size=100%>Total Score: {currentScore}</size>";
+
+        ClearContainer(doraContainer);
+        ClearContainer(uraDoraContainer);
+        if (uraDoraLabel != null) uraDoraLabel.SetActive(false);
+
+        if (nextRoundButton != null) nextRoundButton.gameObject.SetActive(isTenpai);
+
+        resultPanel.SetActive(true);
+    }
+
     public void ShowGameOver(int finalScore)
     {
         if (gameOverPanel == null) return;
@@ -179,7 +203,6 @@ public class MahjongCanvas : MonoBehaviour
         if (finalScoreText != null) 
             finalScoreText.text = $"Game Over\nFinal Score: <color=yellow>{finalScore}</color>";
         
-        // ★修正: 累積スコアではなく、解除済みの役満数を表示
         if (totalCumulativeText != null && MahjongGameManager.Instance != null)
         {
             int yakumanCount = MahjongGameManager.Instance.GetUnlockedYakumanCount();
@@ -356,7 +379,6 @@ public class MahjongCanvas : MonoBehaviour
 
     private void OnSendRankingClicked()
     {
-        // ★修正: ボード2に「役満の解除数」を送信するように変更
         int yakumanCount = 0;
         if (MahjongGameManager.Instance != null)
         {
@@ -364,7 +386,7 @@ public class MahjongCanvas : MonoBehaviour
         }
 
         UnityroomApiClient.Instance.SendScore(1, _lastFinalScore, ScoreboardWriteMode.HighScoreDesc);
-        UnityroomApiClient.Instance.SendScore(2, yakumanCount, ScoreboardWriteMode.HighScoreDesc); // ここが変更点
+        UnityroomApiClient.Instance.SendScore(2, yakumanCount, ScoreboardWriteMode.HighScoreDesc); 
         
         Debug.Log($"Sent Scores -> Board 1: {_lastFinalScore}, Board 2 (Yakuman): {yakumanCount}");
 
@@ -378,5 +400,57 @@ public class MahjongCanvas : MonoBehaviour
         Debug.Log("OnFinishClicked : Go to StartScene");
 
         SceneManager.LoadScene("StartScene");
+    }
+
+    // ★修正: プレハブを使わずコードで画像生成
+    public void ShowUkeirePanel(List<int> effectiveTiles)
+    {
+        if (ukeirePanel == null || ukeireGrid == null) 
+        {
+            Debug.LogWarning("UkeirePanel or Grid is not assigned in Inspector.");
+            return;
+        }
+
+        // 1. 前回の表示内容をクリア
+        foreach (Transform child in ukeireGrid)
+        {
+            Destroy(child.gameObject);
+        }
+
+        // 2. 有効牌がない場合は非表示にして終了
+        if (effectiveTiles == null || effectiveTiles.Count == 0)
+        {
+            ukeirePanel.SetActive(false);
+            return;
+        }
+
+        // 3. 牌の画像をコードで生成して並べる
+        foreach (int tileId in effectiveTiles)
+        {
+            // 新しいゲームオブジェクトを作成
+            GameObject tileObj = new GameObject($"Tile_{tileId}", typeof(RectTransform), typeof(Image));
+            
+            // Gridの子要素にする
+            tileObj.transform.SetParent(ukeireGrid, false);
+
+            // Imageコンポーネントを取得してスプライトを設定
+            Image img = tileObj.GetComponent<Image>();
+            if (tileId >= 0 && tileId < tileSprites.Length)
+            {
+                img.sprite = tileSprites[tileId];
+            }
+            else
+            {
+                img.color = Color.white; // スプライトがない場合は白四角
+            }
+        }
+
+        // 4. パネルを表示
+        ukeirePanel.SetActive(true);
+    }
+
+    public void HideUkeirePanel()
+    {
+        if (ukeirePanel != null) ukeirePanel.SetActive(false);
     }
 }

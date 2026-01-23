@@ -46,6 +46,10 @@ public class MahjongGameConfig : ScriptableObject
     [Tooltip("山の一列あたりの長さ（2段積みなので、例えば17なら34枚）")]
     public int WallStackLength = 17;
 
+    [Header("Assist Settings")]
+    [Tooltip("マウスオーバー時に受け入れ牌を表示するか")]
+    public bool ShowUkeireAssist = true;
+
     [Header("Deck Configuration (Normal Mode Only)")]
     public bool UseManzu = true;   
     public bool UsePinzu = true;   

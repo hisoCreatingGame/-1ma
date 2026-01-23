@@ -7,7 +7,7 @@ public class MahjongPlayer : MonoBehaviour
 {
     public int Seat { get; set; }
     public int Score { get; set; }
-    
+
     public List<MahjongTile> HandTiles { get; private set; } = new List<MahjongTile>();
     public MahjongTile TsumoTile { get; set; }
     public List<MahjongTile> MeldTiles { get; private set; } = new List<MahjongTile>();
@@ -15,7 +15,7 @@ public class MahjongPlayer : MonoBehaviour
 
     public bool IsRiichi { get; set; }
     public List<int> DiscardHistory { get; private set; } = new List<int>();
-    
+
     public bool IsDoubleRiichi { get; set; }
     public bool IsIppatsuChance { get; set; }
 
@@ -26,6 +26,7 @@ public class MahjongPlayer : MonoBehaviour
     public bool IsAutoSortEnabled { get; set; } = false;
     public bool CanRon { get; private set; } = false;
     public int CurrentShanten { get; private set; } = 8;
+
     
     public bool IsHuman = false;
 
@@ -34,6 +35,8 @@ public class MahjongPlayer : MonoBehaviour
     private bool _isHandDirty = true; 
     private bool _isWaitingForRiichiAnkan = false;
     private bool _isRinshanChance = false;
+    public bool IsFirstTurn { get{ return _isFirstTurn; } }
+
     private bool _isFirstTurn = true;
     
     public bool[] DiscardedFlags { get; private set; } = new bool[37];
@@ -48,6 +51,11 @@ public class MahjongPlayer : MonoBehaviour
     private MahjongTile _draggingTile;
     private float _lastSwapTime;
     private int _discardCount = 0;
+
+    private MahjongTile _hoveredTile;
+    private const float HoverYOffset = 0.5f; // ï¿½zï¿½oï¿½[ï¿½ï¿½ï¿½Éã‚°ï¿½é‚ï¿½ï¿½
+
+    private HashSet<MahjongTile> _validRiichiDiscardTiles = new HashSet<MahjongTile>();
 
     public void Initialize(int seatIndex, bool isHuman)
     {
@@ -99,7 +107,6 @@ public class MahjongPlayer : MonoBehaviour
             {
                 if (IsAutoSortEnabled && _draggingTile == null) SortHandTiles();
                 
-                // š’Ç‰Á: è”v‚ª•Ï‚í‚Á‚½ƒ^ƒCƒ~ƒ“ƒO‚ÅƒgƒŠƒK[‚ğŠm”F
                 CheckCurrentTriggers();
 
                 CalculateShantenAndAnkan();
@@ -128,23 +135,293 @@ public class MahjongPlayer : MonoBehaviour
         UpdateTilePositions();
     }
 
+    // ==========================================================================================
+    //  ä¿®æ­£: OnTileHoverEnter
+    //  å¹³å¸¸æ™‚ã¯è¡¨ç¤ºã›ãšã€ãƒªãƒ¼ãƒå®£è¨€å¾…æ©Ÿä¸­ã®ã¿å—ã‘å…¥ã‚Œï¼ˆå¾…ã¡ï¼‰ã‚’è¡¨ç¤ºã™ã‚‹ã‚ˆã†ã«æ¡ä»¶ã‚’è¿½åŠ 
+    // ==========================================================================================
+    public void OnTileHoverEnter(MahjongTile tile)
+    {
+        if (!IsHuman) return;
+        if (IsRiichi) return; 
+        
+        _hoveredTile = tile;
+        _isHandDirty = true; 
+
+        // â˜…ä¿®æ­£: ã€Œãƒªãƒ¼ãƒå®£è¨€å¾…æ©Ÿä¸­ã€ã‹ã¤ã€Œã‚¢ã‚·ã‚¹ãƒˆè¨­å®šONã€ã®å ´åˆã®ã¿è¡¨ç¤º
+        if (MahjongGameManager.Instance != null && 
+            MahjongGameManager.Instance.config.ShowUkeireAssist &&
+            IsRiichiPending) 
+        {
+             CalculateAndShowUkeire(tile);
+        }
+    }
+
+    // ==========================================================================================
+    //  ä¿®æ­£: RequestDiscard
+    //  ãƒªãƒ¼ãƒç¢ºå®šæ™‚ã®å¾…ã¡è¡¨ç¤ºãƒ­ã‚¸ãƒƒã‚¯ã‚’ä¿®æ­£
+    // ==========================================================================================
+    public void RequestDiscard(MahjongTile tileObj)
+    {
+        _discardCount++;
+        bool isDeclaringRiichi = false; 
+
+        if (IsRiichiPending)
+        {
+            if (!_validRiichiDiscardTiles.Contains(tileObj)) return;
+
+            IsRiichi = true;
+            IsIppatsuChance = true; 
+            if (_discardCount == 1 && MeldTiles.Count == 0) IsDoubleRiichi = true;
+            isDeclaringRiichi = true; 
+
+            // â˜…ä¿®æ­£: UpdateRiichiWaitDisplay() ã¯æ‰‹ç‰Œ14æšã§è¨ˆç®—ã—ã¦ã—ã¾ã„çµæœãŒç©ºã«ãªã‚‹ãŸã‚å»ƒæ­¢ã€‚
+            // ä»£ã‚ã‚Šã« CalculateAndShowUkeire ã‚’ä½¿ã„ã€ã€Œã“ã®ç‰Œã‚’åˆ‡ã£ãŸå¾Œã®å¾…ã¡ã€ã‚’æ­£ã—ãè¡¨ç¤ºã—ã¦ç¶­æŒã™ã‚‹ã€‚
+            if (MahjongGameManager.Instance != null && 
+                MahjongGameManager.Instance.config.ShowUkeireAssist)
+            {
+                CalculateAndShowUkeire(tileObj);
+            }
+        }
+        else if (IsRiichi)
+        {
+            IsIppatsuChance = false;
+        }
+
+        ResetTileVisuals();
+
+        _isFirstTurn = false;
+        _isRinshanChance = false;
+        IsRiichiPending = false;
+        
+        if (MahjongGameManager.Instance != null)
+        {
+            MahjongGameManager.Instance.OnDiscardRequested(this, tileObj, isDeclaringRiichi);
+        }
+    }
+
+    // ==========================================================================================
+    //  ä¿®æ­£: SetRiichiPending
+    //  ã‚­ãƒ£ãƒ³ã‚»ãƒ«æ™‚ã«ãƒ‘ãƒãƒ«ã‚’é–‰ã˜ã‚‹å‡¦ç†ã‚’è¿½åŠ 
+    // ==========================================================================================
+    public void SetRiichiPending(bool pending)
+    {
+        if (IsHuman && !IsRiichi) 
+        {
+            IsRiichiPending = pending;
+
+            if (pending)
+            {
+                CalculateValidRiichiDiscards();
+                UpdateRiichiSelectionVisuals();
+                // å¾…æ©Ÿé–‹å§‹ç›´å¾Œã¯ã€ã¾ã ã©ã®ç‰Œã‚‚ãƒ›ãƒãƒ¼ã—ã¦ã„ãªã„ã®ã§ãƒ‘ãƒãƒ«ã¯å‡ºã•ãªã„ï¼ˆãƒ¦ãƒ¼ã‚¶ãƒ¼ã®æ“ä½œå¾…ã¡ï¼‰
+            }
+            else
+            {
+                ResetTileVisuals();
+                // â˜…è¿½åŠ : ã‚­ãƒ£ãƒ³ã‚»ãƒ«æ™‚ã¯ãƒ‘ãƒãƒ«ã‚’éš ã™
+                var canvas = FindAnyObjectByType<MahjongCanvas>();
+                if (canvas != null) canvas.HideUkeirePanel();
+            }
+        }
+    }
+    // ==========================================================================================
+    //  æ—¢å­˜ãƒ¡ã‚½ãƒƒãƒ‰ã®ä¿®æ­£: RequestDiscard
+    // ==========================================================================================
+
+    // ==========================================================================================
+    //  æ—¢å­˜ãƒ¡ã‚½ãƒƒãƒ‰ã®ä¿®æ­£: SetRiichiPending
+    // ==========================================================================================
+
+    // ==========================================================================================
+    //  æ–°è¦è¿½åŠ ãƒ¡ã‚½ãƒƒãƒ‰: ãƒªãƒ¼ãƒæ™‚ã«åˆ‡ã‚Œã‚‹ç‰Œï¼ˆãƒ†ãƒ³ãƒ‘ã‚¤ç¶­æŒï¼‰ã®è¨ˆç®—
+    // ==========================================================================================
+    private void CalculateValidRiichiDiscards()
+    {
+        _validRiichiDiscardTiles.Clear();
+
+        // 1. ç¾åœ¨ã®å…¨æ‰‹ç‰Œã‚«ã‚¦ãƒ³ãƒˆï¼ˆæ­£è¦åŒ–ID 0-33ï¼‰ã‚’ä½œæˆ
+        int[] counts = new int[34];
+        foreach (var t in HandTiles) 
+        {
+            if(t != null) counts[GetNormalizedTileId(t.TileId)]++;
+        }
+        if (TsumoTile != null) 
+        {
+            counts[GetNormalizedTileId(TsumoTile.TileId)]++;
+        }
+        
+        int meldCount = MeldTiles.Count / 4;
+
+        // 2. æ‰‹ç‰Œã®å„ç‰Œã«ã¤ã„ã¦ã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³
+        foreach (var tile in HandTiles)
+        {
+            if(CheckDiscardForTenpai(tile, counts, meldCount)) _validRiichiDiscardTiles.Add(tile);
+        }
+
+        // 3. ãƒ„ãƒ¢ç‰Œã«ã¤ã„ã¦ã‚·ãƒŸãƒ¥ãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³
+        if (TsumoTile != null)
+        {
+             if(CheckDiscardForTenpai(TsumoTile, counts, meldCount)) _validRiichiDiscardTiles.Add(TsumoTile);
+        }
+    }
+
+    // ==========================================================================================
+    //  æ–°è¦è¿½åŠ ãƒ¡ã‚½ãƒƒãƒ‰: ç‰¹å®šã®ç‰Œã‚’åˆ‡ã£ãŸå ´åˆã«ãƒ†ãƒ³ãƒ‘ã‚¤ã™ã‚‹ã‹åˆ¤å®š
+    // ==========================================================================================
+    private bool CheckDiscardForTenpai(MahjongTile tile, int[] counts, int meldCount)
+    {
+        int tid = GetNormalizedTileId(tile.TileId);
+        // countsã¯æ­£è¦åŒ–IDã§ç®¡ç†ã•ã‚Œã¦ã„ã‚‹ãŸã‚ã€ãã®ã¾ã¾ã‚¤ãƒ³ãƒ‡ãƒƒã‚¯ã‚¹ã¨ã—ã¦ä½¿ç”¨
+        if(tid < 34 && counts[tid] > 0)
+        {
+            counts[tid]--; // ä»®ã«åˆ‡ã‚‹
+            int shanten = MahjongLogic.CalculateShanten(counts, meldCount);
+            counts[tid]++; // æˆ»ã™
+            
+            // 0ã¯ãƒ†ãƒ³ãƒ‘ã‚¤ã€‚
+            // ç¨€ã§ã™ãŒã€Œãƒªãƒ¼ãƒå®£è¨€ç‰Œã§ä¸ŠãŒã‚‹ï¼ˆ-1ï¼‰ã€å ´åˆã‚‚ãƒ«ãƒ¼ãƒ«ä¸Šæ‰“ç‰Œã¯å¯èƒ½ãªã®ã§è¨±å¯ã—ã¾ã™ã€‚
+            return (shanten <= 0); 
+        }
+        return false;
+    }
+
+    // ==========================================================================================
+    //  æ–°è¦è¿½åŠ ãƒ¡ã‚½ãƒƒãƒ‰: ç‰Œã®è¡¨ç¤ºæ›´æ–°ï¼ˆç„¡åŠ¹ç‰Œã‚’æš—ãã™ã‚‹ï¼‰
+    // ==========================================================================================
+    private void UpdateRiichiSelectionVisuals()
+    {
+        foreach(var tile in HandTiles)
+        {
+            if(tile) tile.SetDarkened(!_validRiichiDiscardTiles.Contains(tile));
+        }
+        if(TsumoTile) TsumoTile.SetDarkened(!_validRiichiDiscardTiles.Contains(TsumoTile));
+    }
+
+    // ==========================================================================================
+    //  æ–°è¦è¿½åŠ ãƒ¡ã‚½ãƒƒãƒ‰: ç‰Œã®è¡¨ç¤ºãƒªã‚»ãƒƒãƒˆï¼ˆã™ã¹ã¦æ˜ã‚‹ãã™ã‚‹ï¼‰
+    // ==========================================================================================
+    private void ResetTileVisuals()
+    {
+        foreach(var tile in HandTiles) if(tile) tile.SetDarkened(false);
+        if(TsumoTile) TsumoTile.SetDarkened(false);
+    }
+/*/
+    public void RequestDiscard(MahjongTile tileObj)
+    {
+        _discardCount++;
+        bool isDeclaringRiichi = false; 
+
+        if (IsRiichiPending)
+        {
+            IsRiichi = true;
+            IsIppatsuChance = true; 
+            if (_discardCount == 1 && MeldTiles.Count == 0) IsDoubleRiichi = true;
+            isDeclaringRiichi = true; 
+
+            // ï¿½ï¿½ï¿½Ç‰ï¿½: ï¿½ï¿½ï¿½[ï¿½`ï¿½éŒ¾ï¿½mï¿½ï¿½Aï¿½Ò‚ï¿½ï¿½ï¿½\ï¿½ï¿½
+            UpdateRiichiWaitDisplay();
+        }
+        else if (IsRiichi)
+        {
+            IsIppatsuChance = false;
+        }
+
+        _isFirstTurn = false;
+        _isRinshanChance = false;
+        IsRiichiPending = false;
+        
+        if (MahjongGameManager.Instance != null)
+        {
+            MahjongGameManager.Instance.OnDiscardRequested(this, tileObj, isDeclaringRiichi);
+        }
+    }
+/*/
+
+    // ï¿½ï¿½ï¿½Ç‰ï¿½: ï¿½ï¿½ï¿½[ï¿½`ï¿½ï¿½ï¿½Ì‘Ò‚ï¿½ï¿½\ï¿½ï¿½ï¿½Xï¿½Vï¿½ï¿½ï¿½\ï¿½bï¿½h
+    public void UpdateRiichiWaitDisplay()
+    {
+        // ï¿½ï¿½v13ï¿½ï¿½ï¿½Å‚Ì‘Ò‚ï¿½ï¿½ï¿½ï¿½vï¿½Zï¿½ï¿½ï¿½Ä•\ï¿½ï¿½
+        int[] tileCounts = new int[34];
+        foreach (var t in HandTiles)
+        {
+            if(t == null) continue;
+            int tid = GetNormalizedTileId(t.TileId);
+            if (tid < 34) tileCounts[tid]++;
+        }
+
+        int meldCount = MeldTiles.Count / 4;
+        List<int> winningTiles = MahjongLogic.GetWinningTiles(tileCounts, meldCount);
+
+        // Canvasï¿½É•\ï¿½ï¿½ï¿½Ë—ï¿½ï¿½iï¿½ï¿½ï¿½ï¿½ï¿½ï¿½UkeirePanelï¿½ğ—¬—pï¿½j
+        var canvas = FindAnyObjectByType<MahjongCanvas>();
+        if (canvas != null)
+        {
+            canvas.ShowUkeirePanel(winningTiles); 
+        }
+    }
+
+    public void PerformAnkan(int tileType)
+    {
+        List<MahjongTile> tilesToMove = new List<MahjongTile>();
+        bool tsumoUsed = false;
+        List<MahjongTile> tempHand = new List<MahjongTile>(HandTiles);
+        
+        for (int i = tempHand.Count - 1; i >= 0; i--)
+        {
+            if (tilesToMove.Count >= 4) break;
+            int currentId = tempHand[i].TileId;
+            int normalizedId = GetNormalizedTileId(currentId);
+            if (normalizedId == tileType)
+            {
+                tilesToMove.Add(tempHand[i]);
+                tempHand.RemoveAt(i);
+            }
+        }
+
+        if (tilesToMove.Count < 4 && TsumoTile != null)
+        {
+            int normalizedId = GetNormalizedTileId(TsumoTile.TileId);
+            if (normalizedId == tileType)
+            {
+                tilesToMove.Add(TsumoTile);
+                TsumoTile = null;
+                tsumoUsed = true;
+            }
+        }
+
+        if (tilesToMove.Count == 4)
+        {
+            HandTiles.Clear();
+            HandTiles.AddRange(tempHand);
+            foreach (var tile in tilesToMove) MeldTiles.Add(tile);
+            if (!tsumoUsed && TsumoTile != null)
+            {
+                HandTiles.Add(TsumoTile);
+                TsumoTile = null;
+            }
+            
+            _isFirstTurn = false;
+            if (IsRiichi) IsIppatsuChance = false; 
+            _isRinshanChance = true;
+            
+            _isHandDirty = true;
+        }
+    }
+
     public void DespawnAllTiles()
     {
-        // è”v‚Ìíœ
         foreach (var tile in HandTiles)
         {
             if (tile != null && tile.gameObject != null) Destroy(tile.gameObject);
         }
         HandTiles.Clear();
 
-        // –Â‚«”v‚Ìíœ
         foreach (var tile in MeldTiles)
         {
             if (tile != null && tile.gameObject != null) Destroy(tile.gameObject);
         }
         MeldTiles.Clear();
 
-        // ƒcƒ‚”v‚Ìíœ
         if (TsumoTile != null && TsumoTile.gameObject != null)
         {
             Destroy(TsumoTile.gameObject);
@@ -152,80 +429,6 @@ public class MahjongPlayer : MonoBehaviour
         }
     }
 
-    private void CheckCurrentTriggers()
-    {
-        // ƒZƒbƒg‚ğƒNƒŠƒA‚µ‚ÄÄ•]‰¿
-        ActiveSpecialTriggers.Clear();
-
-        if (HandTiles == null || HandTiles.Count == 0) return;
-
-        // --- ƒgƒŠƒK[1: u’†v‚ªˆê”Ô¶iƒCƒ“ƒfƒbƒNƒX0j‚É‚ ‚é ---
-        if (HandTiles.Count > 0 && HandTiles[0] != null)
-        {
-            // 33 = ’†
-            if (HandTiles[(HandTiles.Count - 1) >> 1].TileId == 33)
-            {
-                ActiveSpecialTriggers.Add("CENTER_CHUN");
-                // Debug.Log("Trigger Active: ¶’[‚ª’†‚Å‚·");
-            }
-        }
-
-    }
-
-public List<string> GetActiveTriggersForWin()
-    {
-        // ”O‚Ì‚½‚ßÅV‚Ìó‘Ô‚ğƒ`ƒFƒbƒN
-        CheckCurrentTriggers();
-        return ActiveSpecialTriggers.ToList();
-    }
-
-    // ... (‚»‚Ì‘¼‚Ìƒƒ\ƒbƒh‚Í•ÏX‚È‚µARequestTsumo‚Ì‚İC³‚µ‚ÄŒfÚ) ...
-
-    public void RequestTsumo()
-    {
-        int[] tileCounts = new int[37];
-        foreach (var tile in HandTiles) if(tile) 
-        {
-            int tid = GetNormalizedTileId(tile.TileId);
-            if(tid < 34) tileCounts[tid]++;
-        }
-        if (TsumoTile != null) 
-        {
-            int tid = GetNormalizedTileId(TsumoTile.TileId);
-            if(tid < 34) tileCounts[tid]++;
-        }
-
-        List<int> meldIds = new List<int>();
-        foreach(var tile in MeldTiles) if(tile) meldIds.Add(GetNormalizedTileId(tile.TileId));
-
-        ScoringContext context = new ScoringContext();
-        context.IsFirstTurn = _isFirstTurn;
-        context.IsTsumo = true;
-        context.IsRiichi = IsRiichi;
-        context.IsDealer = (Seat == 0);
-        
-        // šC³: ˆÃÈ‚µ‚©‘¶İ‚µ‚È‚¢ƒ‚[ƒh‚È‚Ì‚ÅAí‚Éƒƒ“ƒ[ƒ“ˆµ‚¢‚É‚·‚é
-        context.IsMenzen = true; 
-        
-        context.RedDoraCount = GetRedDoraCount();
-
-        if (TsumoTile != null) context.WinningTileId = GetNormalizedTileId(TsumoTile.TileId);
-        
-        context.IsRinshan = _isRinshanChance;
-        context.SeatWind = Seat;
-        context.RoundWind = 0;
-        context.DoraTiles = new List<int>();
-
-        // šC³: ‚±‚±‚ÅŒ»İ‚ÌƒAƒNƒeƒBƒu‚ÈƒgƒŠƒK[‚ğƒRƒ“ƒeƒLƒXƒg‚É“n‚·
-        context.SpecialYakuTriggers = GetActiveTriggersForWin();
-
-        ScoringResult result = MahjongLogic.CalculateScore(tileCounts, meldIds, context); 
-
-        if (MahjongGameManager.Instance != null)
-        {
-            MahjongGameManager.Instance.OnTsumoRequested(this, result.TotalScore, result.YakuList.ToArray());
-        }
-    }
     private void CalculateShantenAndAnkan()
     {
         int[] tileCounts = new int[37];
@@ -253,6 +456,109 @@ public List<string> GetActiveTriggersForWin()
         CheckRedAnkan(rawCounts, 4, 34);  // Manzu
         CheckRedAnkan(rawCounts, 13, 35); // Pinzu
         CheckRedAnkan(rawCounts, 22, 36); // Sozu
+
+        if (IsRiichi && AvailableAnkanTiles.Count > 0)
+        {
+            int[] hand13Counts = new int[34];
+            foreach (var tile in HandTiles)
+            {
+                if(tile)
+                {
+                    int tid = GetNormalizedTileId(tile.TileId);
+                    if (tid < 34) hand13Counts[tid]++;
+                }
+            }
+            List<int> waitsBefore = MahjongLogic.GetWinningTiles(hand13Counts, meldCount);
+
+            List<int> toRemove = new List<int>();
+
+            foreach(int kanId in AvailableAnkanTiles)
+            {
+                int normalId = GetNormalizedTileId(kanId);
+                
+                int[] hand10Counts = (int[])tileCounts.Clone();
+                if(normalId < 34) hand10Counts[normalId] -= 4;
+
+                List<int> waitsAfter = MahjongLogic.GetWinningTiles(hand10Counts, meldCount + 1);
+
+                bool isWaitChanged = false;
+                
+                if (waitsBefore.Count != waitsAfter.Count)
+                {
+                    isWaitChanged = true;
+                }
+                else
+                {
+                    if (waitsBefore.Except(waitsAfter).Any()) isWaitChanged = true;
+                }
+
+                if (isWaitChanged)
+                {
+                    toRemove.Add(kanId);
+                }
+            }
+
+            foreach(int rm in toRemove) AvailableAnkanTiles.Remove(rm);
+        }
+    }
+    private void CheckCurrentTriggers()
+    {
+        ActiveSpecialTriggers.Clear();
+
+        if (HandTiles == null || HandTiles.Count == 0) return;
+
+        if (HandTiles.Count > 0 && HandTiles[0] != null)
+        {
+            if (HandTiles[(HandTiles.Count - 1) >> 1].TileId == 33)
+            {
+                ActiveSpecialTriggers.Add("CENTER_CHUN");
+            }
+        }
+    }
+
+    public List<string> GetActiveTriggersForWin()
+    {
+        CheckCurrentTriggers();
+        return ActiveSpecialTriggers.ToList();
+    }
+
+    public void RequestTsumo()
+    {
+        int[] tileCounts = new int[37];
+        foreach (var tile in HandTiles) if(tile) 
+        {
+            int tid = GetNormalizedTileId(tile.TileId);
+            if(tid < 34) tileCounts[tid]++;
+        }
+        if (TsumoTile != null) 
+        {
+            int tid = GetNormalizedTileId(TsumoTile.TileId);
+            if(tid < 34) tileCounts[tid]++;
+        }
+
+        List<int> meldIds = new List<int>();
+        foreach(var tile in MeldTiles) if(tile) meldIds.Add(GetNormalizedTileId(tile.TileId));
+
+        ScoringContext context = new ScoringContext();
+        context.IsFirstTurn = _isFirstTurn;
+        context.IsTsumo = true;
+        context.IsRiichi = IsRiichi;
+        context.IsDealer = (Seat == 0);
+        context.IsMenzen = true; 
+        context.RedDoraCount = GetRedDoraCount();
+        if (TsumoTile != null) context.WinningTileId = GetNormalizedTileId(TsumoTile.TileId);
+        context.IsRinshan = _isRinshanChance;
+        context.SeatWind = Seat;
+        context.RoundWind = 0;
+        context.DoraTiles = new List<int>();
+        context.SpecialYakuTriggers = GetActiveTriggersForWin();
+
+        ScoringResult result = MahjongLogic.CalculateScore(tileCounts, meldIds, context); 
+
+        if (MahjongGameManager.Instance != null)
+        {
+            MahjongGameManager.Instance.OnTsumoRequested(this, result.TotalScore, result.YakuList.ToArray());
+        }
     }
 
     private void CheckRedAnkan(int[] counts, int normalId, int redId)
@@ -324,14 +630,61 @@ public List<string> GetActiveTriggersForWin()
     public void AddToDiscardHistory(int tileId) { DiscardHistory.Add(tileId); }
     public void ClearDiscardHistory() { DiscardHistory.Clear(); }
 
-    // šC³: ƒt[ƒiˆÃÈj‚ÌˆÊ’uƒYƒŒ–h~‚ÆTsumoSlot‚ÌŠm•Û
+
+    public void OnTileHoverExit(MahjongTile tile)
+    {
+        if (_hoveredTile == tile)
+        {
+            _hoveredTile = null;
+            _isHandDirty = true;
+
+            var canvas = FindAnyObjectByType<MahjongCanvas>();
+            if (canvas != null) canvas.HideUkeirePanel();
+        }
+    }
+
+    private void CalculateAndShowUkeire(MahjongTile discardCandidate)
+    {
+        int[] tileCounts14 = new int[37];
+        foreach (var t in HandTiles) if(t) tileCounts14[t.TileId]++;
+        if (TsumoTile) tileCounts14[TsumoTile.TileId]++;
+
+        int discardId = GetNormalizedTileId(discardCandidate.TileId);
+        if (tileCounts14[discardId] > 0)
+        {
+            tileCounts14[discardId]--;
+        }
+        else
+        {
+            return; 
+        }
+        
+        int[] counts34 = new int[34];
+        for(int i=0; i<34; i++) counts34[i] = tileCounts14[i];
+        if(tileCounts14[34] > 0) counts34[4] += tileCounts14[34];
+        if(tileCounts14[35] > 0) counts34[13] += tileCounts14[35];
+        if(tileCounts14[36] > 0) counts34[22] += tileCounts14[36];
+
+        int meldCount = MeldTiles.Count / 4;
+        
+        List<int> effectiveTiles = MahjongLogic.GetEffectiveTiles(counts34, meldCount);
+
+        var canvas = FindAnyObjectByType<MahjongCanvas>();
+        if (canvas != null)
+        {
+            canvas.ShowUkeirePanel(effectiveTiles);
+        }
+    }
+
     private void UpdateTilePositions()
     {
-        // è”v‚Ì•
+        if (HandTiles.Count == 0 && TsumoTile == null && MeldTiles.Count == 0) return;
+
+        // ï¿½ï¿½vï¿½Ì•ï¿½
         float handWidth = 0f;
         if (HandTiles.Count > 0) handWidth += HandTiles.Count * tileWidth;
 
-        // ƒt[ƒ”v‚Ì•
+        // ï¿½tï¿½[ï¿½ï¿½ï¿½vï¿½Ì•ï¿½
         float meldsWidth = 0f;
         int meldSetCount = MeldTiles.Count / 4;
         if (meldSetCount > 0)
@@ -339,41 +692,57 @@ public List<string> GetActiveTriggersForWin()
             meldsWidth += MeldTiles.Count * tileWidth;
         }
 
-        // ‘S‘Ì‚Ì•ŒvZ
-        // ˆÃÈ‚È‚Çƒt[ƒ‚ª‚ ‚éê‡‚ÍAuè”vv{uƒcƒ‚”v—pƒXƒƒbƒgv{uƒt[ƒ”vv‚Ì\¬‚É‚·‚é
-        // ‚±‚ê‚É‚æ‚èAƒcƒ‚”v‚Ì—L–³‚ÉŠÖ‚í‚ç‚¸ƒt[ƒ”v‚ÌˆÊ’u‚ªŒÅ’è‚³‚ê‚é
+        // ï¿½Sï¿½Ì‚Ì•ï¿½ï¿½vï¿½Z
         float totalVisualWidth = handWidth;
         float tsumoSlotSize = tsumoGap + tileWidth;
 
         if (meldSetCount > 0)
         {
-            // ƒt[ƒ‚ª‚ ‚é‚È‚çAƒcƒ‚”v‚ª“ü‚é‚½‚ß‚ÌŒ„ŠÔ‚Æƒt[ƒ—pŒ„ŠÔ‚ğí‚ÉŠm•Û‚·‚é
             totalVisualWidth += tsumoSlotSize + meldGap + meldsWidth;
         }
 
         float startX = -totalVisualWidth / 2.0f + (tileWidth / 2.0f);
         float currentX = startX;
 
-        // 1. è”v”z’u
+        // 1. ï¿½ï¿½vï¿½zï¿½u
         for (int i = 0; i < HandTiles.Count; i++)
         {
             if(HandTiles[i] != null)
-                MoveTileToTarget(HandTiles[i], currentX, false, false);
+            {
+                // ï¿½ï¿½ï¿½Cï¿½ï¿½: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Zï¿½ğ–³Œï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÄˆÊ’uï¿½ï¿½ï¿½Å’è‚·ï¿½ï¿½
+                var rb = HandTiles[i].GetComponent<Rigidbody>();
+                if (rb != null)
+                {
+                    rb.isKinematic = true;
+                    rb.useGravity = false;
+                    rb.linearVelocity = Vector3.zero;
+                    rb.angularVelocity = Vector3.zero;
+                }
+
+                float yPos = (HandTiles[i] == _hoveredTile) ? HoverYOffset : 0f;
+                MoveTileToTarget(HandTiles[i], currentX, yPos, false, false);
+            }
             currentX += tileWidth;
         }
 
-        // 2. ƒcƒ‚”v”z’u
-        // ƒcƒ‚”v‚ª‚ ‚éê‡‚ÍAè”v‚Ì‰E—×igap•ª‹ó‚¯‚Äj‚É”z’u
-        // ‚½‚¾‚µ currentX ‚Íè”v‚Ì’¼Œã‚ğw‚µ‚Ä‚¢‚é‚Ì‚ÅAgap‚ğ‰ÁZ‚·‚é
+        // 2. ï¿½cï¿½ï¿½ï¿½vï¿½zï¿½u
         if (TsumoTile != null)
         {
-            MoveTileToTarget(TsumoTile, startX + handWidth + tsumoGap, false, false);
+            // ï¿½ï¿½ï¿½Cï¿½ï¿½: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Zï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+            var rb = TsumoTile.GetComponent<Rigidbody>();
+            if (rb != null)
+            {
+                rb.isKinematic = true;
+                rb.useGravity = false;
+            }
+
+            float yPos = (TsumoTile == _hoveredTile) ? HoverYOffset : 0f;
+            MoveTileToTarget(TsumoTile, startX + handWidth + tsumoGap, yPos, false, false);
         }
 
-        // 3. ƒt[ƒ”v”z’u
+        // 3. ï¿½tï¿½[ï¿½ï¿½ï¿½vï¿½zï¿½u
         if (meldSetCount > 0)
         {
-            // ƒt[ƒ”v‚ÌŠJnˆÊ’u‚ÍAuè”v‚Ì•v+uƒcƒ‚—pƒXƒƒbƒg(í‚ÉŠm•Û)v+uƒt[ƒ—pƒMƒƒƒbƒvv‚ÌŒã‚ë
             float meldStartX = startX + handWidth + tsumoSlotSize + meldGap;
             
             for (int m = 0; m < meldSetCount; m++)
@@ -387,6 +756,15 @@ public List<string> GetActiveTriggersForWin()
                     if (tileIndex < MeldTiles.Count && MeldTiles[tileIndex] != null)
                     {
                         var tileObj = MeldTiles[tileIndex];
+                        
+                        // ï¿½ï¿½ï¿½Cï¿½ï¿½: ï¿½tï¿½[ï¿½ï¿½ï¿½vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Zï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+                        var rb = tileObj.GetComponent<Rigidbody>();
+                        if (rb != null)
+                        {
+                            rb.isKinematic = true;
+                            rb.useGravity = false;
+                        }
+
                         bool isFaceDown = (i == 0 || i == 3);
                         float tilePos = setBaseX + (i * tileWidth);
                         Vector3 localOffset = new Vector3(tilePos, tileHeight / 2, 0);
@@ -397,11 +775,11 @@ public List<string> GetActiveTriggersForWin()
         }
     }
 
-    private void MoveTileToTarget(MahjongTile tile, float localX, bool faceDown, bool isMeld)
+    private void MoveTileToTarget(MahjongTile tile, float localX, float localY, bool faceDown, bool isMeld)
     {
         if (tile != null)
         {
-            Vector3 localOffset = new Vector3(localX, tileHeight / 2, 0);
+            Vector3 localOffset = new Vector3(localX, tileHeight / 2 + localY, 0);
             ApplyTransform(tile.transform, localOffset, faceDown, isMeld);
         }
     }
@@ -483,10 +861,12 @@ public List<string> GetActiveTriggersForWin()
     public void StartDraggingTile(MahjongTile tile) { if(IsHuman) { _draggingTile = tile; _isHandDirty = true; } }
     public void StopDraggingTile(MahjongTile tile) { if (_draggingTile == tile) _draggingTile = null; }
 
+    /*/
     public void SetRiichiPending(bool pending)
     {
         if (IsHuman && !IsRiichi) IsRiichiPending = pending;
     }
+    /*/
 
     public void OnAnyMeldOccurred()
     {
@@ -519,32 +899,6 @@ public List<string> GetActiveTriggersForWin()
         }
     }
 
-    public void RequestDiscard(MahjongTile tileObj)
-    {
-        _discardCount++;
-        bool isDeclaringRiichi = false; 
-
-        if (IsRiichiPending)
-        {
-            IsRiichi = true;
-            IsIppatsuChance = true; 
-            if (_discardCount == 1 && MeldTiles.Count == 0) IsDoubleRiichi = true;
-            isDeclaringRiichi = true; 
-        }
-
-        _isFirstTurn = false;
-        _isRinshanChance = false;
-        
-        if (IsRiichi) IsIppatsuChance = false; 
-
-        IsRiichiPending = false;
-        
-        if (MahjongGameManager.Instance != null)
-        {
-            MahjongGameManager.Instance.OnDiscardRequested(this, tileObj, isDeclaringRiichi);
-        }
-    }
-
     public void AddTileToHand(MahjongTile tile) { HandTiles.Add(tile); _isHandDirty = true; }
     
     public void SetTsumoTile(MahjongTile tile) 
@@ -561,7 +915,6 @@ public List<string> GetActiveTriggersForWin()
         TsumoTile = null; 
         _isHandDirty = true; 
     }
-
 
     public int GetRedDoraCount()
     {
@@ -596,49 +949,6 @@ public List<string> GetActiveTriggersForWin()
         {
             _isWaitingForRiichiAnkan = false;
             StartCoroutine(AutoDiscardRoutine());
-        }
-    }
-
-    public void PerformAnkan(int tileType)
-    {
-        List<MahjongTile> tilesToMove = new List<MahjongTile>();
-        bool tsumoUsed = false;
-        List<MahjongTile> tempHand = new List<MahjongTile>(HandTiles);
-        
-        for (int i = tempHand.Count - 1; i >= 0; i--)
-        {
-            if (tilesToMove.Count >= 4) break;
-            int currentId = tempHand[i].TileId;
-            int normalizedId = GetNormalizedTileId(currentId);
-            if (normalizedId == tileType)
-            {
-                tilesToMove.Add(tempHand[i]);
-                tempHand.RemoveAt(i);
-            }
-        }
-
-        if (tilesToMove.Count < 4 && TsumoTile != null)
-        {
-            int normalizedId = GetNormalizedTileId(TsumoTile.TileId);
-            if (normalizedId == tileType)
-            {
-                tilesToMove.Add(TsumoTile);
-                TsumoTile = null;
-                tsumoUsed = true;
-            }
-        }
-
-        if (tilesToMove.Count == 4)
-        {
-            HandTiles.Clear();
-            HandTiles.AddRange(tempHand);
-            foreach (var tile in tilesToMove) MeldTiles.Add(tile);
-            if (!tsumoUsed && TsumoTile != null)
-            {
-                HandTiles.Add(TsumoTile);
-                TsumoTile = null;
-            }
-            _isHandDirty = true;
         }
     }
 }
