@@ -1,72 +1,133 @@
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
+using UnityEngine.Serialization;
 
-[RequireComponent(typeof(Image))]            // ImageƒRƒ“ƒ|[ƒlƒ“ƒg•K{
-[RequireComponent(typeof(SmoothHoverObject))] // SmoothHoverObjectƒRƒ“ƒ|[ƒlƒ“ƒg•K{
-public class YakumanAchievementSlot : MonoBehaviour
+[RequireComponent(typeof(Image))]            // Imageï¿½Rï¿½ï¿½ï¿½|ï¿½[ï¿½lï¿½ï¿½ï¿½gï¿½Kï¿½{
+[RequireComponent(typeof(SmoothHoverObject))] // SmoothHoverObjectï¿½Rï¿½ï¿½ï¿½|ï¿½[ï¿½lï¿½ï¿½ï¿½gï¿½Kï¿½{
+public class YakumanAchievementSlot : MonoBehaviour, IPointerEnterHandler
 {
-    [Header("ÀÑİ’è")]
-    [Tooltip("MahjongGameManager‚Å’è‹`‚µ‚½–ğ–‚Ì–¼‘O‚ÆŠ®‘S‚Éˆê’v‚³‚¹‚Ä‚­‚¾‚³‚¢i—á: ‘m–³‘oj")]
+    [Header("ï¿½ï¿½ï¿½Ñİ’ï¿½")]
+    [Tooltip("MahjongGameManagerï¿½Å’ï¿½`ï¿½ï¿½ï¿½ï¿½ï¿½ğ–‚Ì–ï¿½ï¿½Oï¿½ÆŠï¿½ï¿½Sï¿½Éˆï¿½vï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½iï¿½ï¿½: ï¿½ï¿½ï¿½mï¿½ï¿½ï¿½oï¿½j")]
     public string targetYakumanName;
 
-    [Header("‰æ‘œİ’è")]
-    public Sprite unlockedSprite; // ‰ğœ‚³‚ê‚½‚Ì‰æ‘œiƒJƒ‰[‚È‚Çj
-    public Sprite lockedSprite;   // –¢‰ğœ‚Ì‚Ì‰æ‘œiƒVƒ‹ƒGƒbƒg‚âŒ®ƒAƒCƒRƒ“‚È‚Çj
+    [Header("ï¿½æ‘œï¿½İ’ï¿½")]
+    public Sprite unlockedSprite; // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ê‚½ï¿½ï¿½ï¿½Ì‰æ‘œï¿½iï¿½Jï¿½ï¿½ï¿½[ï¿½È‚Çj
+    public Sprite lockedSprite;   // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ìï¿½ï¿½Ì‰æ‘œï¿½iï¿½Vï¿½ï¿½ï¿½Gï¿½bï¿½gï¿½âŒ®ï¿½Aï¿½Cï¿½Rï¿½ï¿½ï¿½È‚Çj
+    [Header("SE")]
+    [SerializeField] private AudioSource touchSeSource;
+    [FormerlySerializedAs("touchSeClip")]
+    [SerializeField] private AudioClip unlockedTouchSeClip;
+    [SerializeField] private AudioClip lockedTouchSeClip;
+    [FormerlySerializedAs("touchSeVolume")]
+    [SerializeField, Range(0f, 1f)] private float unlockedTouchSeVolume = 1f;
+    [SerializeField, Range(0f, 1f)] private float lockedTouchSeVolume = 1f;
+
+    private bool _isUnlocked;
 
     private void Start()
     {
+        SetupTouchSeSource();
         UpdateSlotStatus();
     }
 
     public void UpdateSlotStatus()
     {
-        // 1. •Û‘¶‚³‚ê‚½ÀÑƒf[ƒ^‚ÌŠm”F
-        // ƒL[‚Í Manager ‚Å•Û‘¶‚µ‚½ "Yakuman_" + –ğ––¼
+        // 1. ï¿½Û‘ï¿½ï¿½ï¿½ï¿½ê‚½ï¿½ï¿½ï¿½Ñƒfï¿½[ï¿½^ï¿½ÌŠmï¿½F
+        // ï¿½Lï¿½[ï¿½ï¿½ Manager ï¿½Å•Û‘ï¿½ï¿½ï¿½ï¿½ï¿½ "Yakuman_" + ï¿½ğ––ï¿½
         string key = "Yakuman_" + targetYakumanName;
         bool isUnlocked = PlayerPrefs.GetInt(key, 0) == 1;
+        _isUnlocked = isUnlocked;
 
-        // 2. ‰æ‘œ‚ÌØ‚è‘Ö‚¦
+        // 2. ï¿½æ‘œï¿½ÌØ‚ï¿½Ö‚ï¿½
         Image targetImage = GetComponent<Image>();
         if (targetImage != null)
         {
             if (isUnlocked)
             {
                 if (unlockedSprite != null) targetImage.sprite = unlockedSprite;
-                targetImage.color = Color.white; // –{—ˆ‚ÌF
+                targetImage.color = Color.white; // ï¿½{ï¿½ï¿½ï¿½ÌF
             }
             else
             {
                 if (lockedSprite != null) targetImage.sprite = lockedSprite;
                 else
                 {
-                    // ƒƒbƒN‰æ‘œ‚ªİ’è‚³‚ê‚Ä‚¢‚È‚¢ê‡‚ÍA•‚­‚·‚é‚È‚Ç‚Ì‘Î‰
+                    // ï¿½ï¿½ï¿½bï¿½Nï¿½æ‘œï¿½ï¿½ï¿½İ’è‚³ï¿½ï¿½Ä‚ï¿½ï¿½È‚ï¿½ï¿½ê‡ï¿½ÍAï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È‚Ç‚Ì‘Î‰ï¿½
                     targetImage.color = Color.black; 
                 }
             }
         }
 
-        // 3. ƒzƒo[‚ÌƒeƒLƒXƒgØ‚è‘Ö‚¦ (SmoothHoverObject˜AŒg)
+        // 3. ï¿½zï¿½oï¿½[ï¿½ï¿½ï¿½Ìƒeï¿½Lï¿½Xï¿½gï¿½Ø‚ï¿½Ö‚ï¿½ (SmoothHoverObjectï¿½Aï¿½g)
         SmoothHoverObject hoverScript = GetComponent<SmoothHoverObject>();
         if (hoverScript != null)
         {
             if (isUnlocked)
             {
-                // ‰ğœÏ‚İ‚È‚ç–ğ––¼‚ğ•\¦
+                // ï¿½ï¿½ï¿½ï¿½ï¿½Ï‚İ‚È‚ï¿½ğ––ï¿½ï¿½ï¿½\ï¿½ï¿½
                 hoverScript.SetDisplayName(targetYakumanName);
             }
             else
             {
-                // –¢‰ğœ‚È‚ç "???" ‚É‚·‚é
+                // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È‚ï¿½ "???" ï¿½É‚ï¿½ï¿½ï¿½
                 hoverScript.SetDisplayName("???");
             }
         }
     }
     
-    // ƒfƒoƒbƒO—p: ‹­§“I‚ÉƒƒbƒNó‘Ô‚ğƒŠƒZƒbƒg‚µ‚½‚¢ê‡‚Ég—p
+    // ï¿½fï¿½oï¿½bï¿½Oï¿½p: ï¿½ï¿½ï¿½ï¿½ï¿½Iï¿½Éƒï¿½ï¿½bï¿½Nï¿½ï¿½Ô‚ï¿½ï¿½ï¿½ï¿½Zï¿½bï¿½gï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ê‡ï¿½Égï¿½p
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        PlayTouchSeForCurrentStatus();
+    }
+
     public void ResetStatus()
     {
          string key = "Yakuman_" + targetYakumanName;
          PlayerPrefs.DeleteKey(key);
          UpdateSlotStatus();
+    }
+
+    private void SetupTouchSeSource()
+    {
+        if (touchSeSource == null)
+        {
+            touchSeSource = GetComponent<AudioSource>();
+        }
+
+        if (touchSeSource == null)
+        {
+            touchSeSource = gameObject.AddComponent<AudioSource>();
+        }
+
+        touchSeSource.playOnAwake = false;
+        touchSeSource.loop = false;
+    }
+
+    private void PlayTouchSeForCurrentStatus()
+    {
+        if (touchSeSource == null)
+        {
+            return;
+        }
+
+        AudioClip clip = _isUnlocked ? unlockedTouchSeClip : lockedTouchSeClip;
+        float volume = _isUnlocked ? unlockedTouchSeVolume : lockedTouchSeVolume;
+
+        // ã©ã¡ã‚‰ã‹æœªè¨­å®šã§ã‚‚æœ€ä½é™é³´ã‚‹ã‚ˆã†ã«ãƒ•ã‚©ãƒ¼ãƒ«ãƒãƒƒã‚¯
+        if (clip == null)
+        {
+            clip = _isUnlocked ? lockedTouchSeClip : unlockedTouchSeClip;
+            volume = _isUnlocked ? lockedTouchSeVolume : unlockedTouchSeVolume;
+        }
+
+        if (clip == null)
+        {
+            return;
+        }
+
+        touchSeSource.PlayOneShot(clip, Mathf.Clamp01(volume));
     }
 }

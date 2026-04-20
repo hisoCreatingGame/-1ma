@@ -17,7 +17,6 @@ public class MahjongTable : MonoBehaviour
     // 定数
     private const float TileWidth = 4.1f; 
     private const float TileHeight = 5.3f; 
-    private const int FilesPerRow = 6; 
     private const float Gap = 0.0f;
 
     private Dictionary<int, int> discardCounts = new Dictionary<int, int>();
@@ -52,8 +51,8 @@ public class MahjongTable : MonoBehaviour
         int currentCount = discardCounts[seat];
         
         // --- 行と列 ---
-        int row = currentCount / FilesPerRow;
-        int col = currentCount % FilesPerRow;
+        int row = currentCount / MahjongGameManager.Instance.config.RiverLength;
+        int col = currentCount % MahjongGameManager.Instance.config.RiverLength;
 
         // 行が変わったらカーソルリセット
         if (!seatCursorX.ContainsKey(seat) || col == 0)
@@ -66,20 +65,20 @@ public class MahjongTable : MonoBehaviour
         float currentVisualHeight = isRiichi ? TileWidth : TileHeight;
 
         // --- 座標計算 ---
-        float xCenterPos = seatCursorX[seat] + (currentVisualWidth / 2.0f);
+        float xCenterPos = -TileWidth*MahjongGameManager.Instance.config.RiverLength / 2 + seatCursorX[seat] + (currentVisualWidth / 2.0f);
         seatCursorX[seat] += currentVisualWidth + Gap; 
 
         // Z座標: 行の基準位置
-        float baseZ = -row * TileHeight;
+        float baseZ = -row * TileHeight - 10.0f;
         float zOffset = (TileHeight - currentVisualHeight) / 2.0f;
         
-        Vector3 localPos = new Vector3(xCenterPos, 0f, baseZ + zOffset);
+        Vector3 localPos = new Vector3(xCenterPos, 1.7f, baseZ + zOffset);
 
         // --- 生成と適用 ---
         GameObject discardObj = Instantiate(prefab, targetRiver);
         discardObj.transform.localPosition = localPos;
         
-        Quaternion baseRotation = Quaternion.Euler(-90f, 0, 0); 
+        Quaternion baseRotation = Quaternion.Euler(-90f, 0, 180); 
         discardObj.transform.localRotation = baseRotation;
 
         if (isRiichi)

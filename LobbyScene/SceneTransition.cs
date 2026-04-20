@@ -1,12 +1,14 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using System.Collections; // ƒRƒ‹[ƒ`ƒ“‚É•K—v
+using System.Collections; // ï¿½Rï¿½ï¿½ï¿½[ï¿½`ï¿½ï¿½ï¿½É•Kï¿½v
 
 public class SceneTransition : MonoBehaviour
 {
-    [SerializeField] private string nextSceneName; // ‘JˆÚæ‚ÌƒV[ƒ“–¼
+    [SerializeField] private string nextSceneName; // ï¿½Jï¿½Úï¿½ÌƒVï¿½[ï¿½ï¿½ï¿½ï¿½
+    [SerializeField] private string transitionSeKey = SeKeys.LobbyBackButton;
+    [SerializeField] private float waitTime = 1.0f;
 
-    // ƒ{ƒ^ƒ“‚É“o˜^‚·‚éŠÖ”
+    // ï¿½{ï¿½^ï¿½ï¿½ï¿½É“oï¿½^ï¿½ï¿½ï¿½ï¿½Öï¿½
     public void OnTransitionButtonPressed()
     {
         StartCoroutine(WaitAndLoad());
@@ -14,12 +16,12 @@ public class SceneTransition : MonoBehaviour
 
     IEnumerator WaitAndLoad()
     {
-        // ‚±‚±‚ÉƒNƒŠƒbƒN‰¹‚È‚Ç‚ğÄ¶‚·‚éƒR[ƒh‚ğ“ü‚ê‚Ä‚à—Ç‚¢‚Å‚·‚Ë
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ÉƒNï¿½ï¿½ï¿½bï¿½Nï¿½ï¿½ï¿½È‚Ç‚ï¿½ï¿½Äï¿½ï¿½ï¿½ï¿½ï¿½Rï¿½[ï¿½hï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½Ç‚ï¿½ï¿½Å‚ï¿½ï¿½ï¿½
 
-        // 1•b‘Ò‚Â
-        yield return new WaitForSeconds(1.0f);
+        // 1ï¿½bï¿½Ò‚ï¿½
+        yield return StartCoroutine(SeController.PlayAndWait(transitionSeKey, waitTime));
 
-        // ƒV[ƒ“‚ğƒ[ƒh
+        // ï¿½Vï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½[ï¿½h
         SceneManager.LoadScene(nextSceneName);
     }
 }

@@ -6,28 +6,33 @@ using TMPro;
 
 public class SmoothZoomButton : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler
 {
-    [Header("ƒeƒLƒXƒgİ’è")]
+    [Header("ï¿½eï¿½Lï¿½Xï¿½gï¿½İ’ï¿½")]
     [SerializeField] private TMP_Text outputText;
     [SerializeField, TextArea] private string message;
 
-    [Header("ƒY[ƒ€İ’è")]
-    [SerializeField] private float zoomScale = 1.2f;   // –Ú•W‚Ì”{—¦
-    [SerializeField] private float duration = 0.2f;    // •Ï‰»‚É‚©‚©‚éŠÔi•bj
-    [SerializeField] private float startDelay = 0.0f;  // ŠJn‚·‚é‚Ü‚Å‚Ì’x‰„i•bj
+    [Header("ï¿½Yï¿½[ï¿½ï¿½ï¿½İ’ï¿½")]
+    [SerializeField] private float zoomScale = 1.2f;   // ï¿½Ú•Wï¿½Ì”{ï¿½ï¿½
+    [SerializeField] private float duration = 0.2f;    // ï¿½Ï‰ï¿½ï¿½É‚ï¿½ï¿½ï¿½ï¿½éï¿½Ôiï¿½bï¿½j
+    [SerializeField] private float startDelay = 0.0f;  // ï¿½Jï¿½nï¿½ï¿½ï¿½ï¿½Ü‚Å‚Ì’xï¿½ï¿½ï¿½iï¿½bï¿½j
+    [Header("SE")]
+    [SerializeField] private AudioSource clickSeSource;
+    [SerializeField] private AudioClip clickSeClip;
+    [SerializeField, Range(0f, 1f)] private float clickSeVolume = 1f;
 
     private Vector3 defaultScale;
     
-    // ƒY[ƒ€—p‚ÌƒRƒ‹[ƒ`ƒ“
+    // ï¿½Yï¿½[ï¿½ï¿½ï¿½pï¿½ÌƒRï¿½ï¿½ï¿½[ï¿½`ï¿½ï¿½
     private Coroutine currentZoomCoroutine; 
     
-    // š’Ç‰Á: ƒƒbƒZ[ƒW•\¦—p‚ÌƒRƒ‹[ƒ`ƒ“iƒY[ƒ€—p‚Æ‚Í•ª‚¯‚é•K—v‚ª‚ ‚è‚Ü‚·j
+    // ï¿½ï¿½ï¿½Ç‰ï¿½: ï¿½ï¿½ï¿½bï¿½Zï¿½[ï¿½Wï¿½\ï¿½ï¿½ï¿½pï¿½ÌƒRï¿½ï¿½ï¿½[ï¿½`ï¿½ï¿½ï¿½iï¿½Yï¿½[ï¿½ï¿½ï¿½pï¿½Æ‚Í•ï¿½ï¿½ï¿½ï¿½ï¿½Kï¿½vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ü‚ï¿½ï¿½j
     private Coroutine _messageCoroutine;
 
     void Start()
     {
         defaultScale = transform.localScale;
+        SetupClickSeSource();
 
-        // “§‰ß•”•ª‚Ì”»’èœŠOİ’è
+        // ï¿½ï¿½ï¿½ß•ï¿½ï¿½ï¿½ï¿½Ì”ï¿½ï¿½èœï¿½Oï¿½İ’ï¿½
         Image img = GetComponent<Image>();
         if (img != null)
         {
@@ -35,10 +40,11 @@ public class SmoothZoomButton : MonoBehaviour, IPointerEnterHandler, IPointerExi
         }
     }
 
-    // --- ƒY[ƒ€ˆ— (OnPointerEnter / OnPointerExit) ---
+    // --- ï¿½Yï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ (OnPointerEnter / OnPointerExit) ---
 
     public void OnPointerEnter(PointerEventData eventData)
     {
+        PlayClickSe();
         if (currentZoomCoroutine != null) StopCoroutine(currentZoomCoroutine);
         currentZoomCoroutine = StartCoroutine(ScaleTo(defaultScale * zoomScale, startDelay));
     }
@@ -65,36 +71,62 @@ public class SmoothZoomButton : MonoBehaviour, IPointerEnterHandler, IPointerExi
         transform.localScale = targetScale;
     }
 
-    // --- ƒNƒŠƒbƒN‚ÌƒeƒLƒXƒgˆ— (OnPointerClick) ---
+    // --- ï¿½Nï¿½ï¿½ï¿½bï¿½Nï¿½ï¿½ï¿½Ìƒeï¿½Lï¿½Xï¿½gï¿½ï¿½ï¿½ï¿½ (OnPointerClick) ---
 
-    // šC³‰ÓŠ: ƒNƒŠƒbƒN‚É2•bŠÔ‚¾‚¯ƒeƒLƒXƒg‚ğ•\¦‚·‚é
+    // ï¿½ï¿½ï¿½Cï¿½ï¿½ï¿½Óï¿½: ï¿½Nï¿½ï¿½ï¿½bï¿½Nï¿½ï¿½ï¿½ï¿½2ï¿½bï¿½Ô‚ï¿½ï¿½ï¿½ï¿½eï¿½Lï¿½Xï¿½gï¿½ï¿½\ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     public void OnPointerClick(PointerEventData eventData)
     {
         if (outputText != null)
         {
-            // ˜A‘Å‘Îô: Šù‚ÉƒƒbƒZ[ƒW•\¦‚Ìƒ^ƒCƒ}[‚ª“®‚¢‚Ä‚¢‚½‚çƒŠƒZƒbƒg‚·‚é
+            // ï¿½Aï¿½Å‘Îï¿½: ï¿½ï¿½ï¿½Éƒï¿½ï¿½bï¿½Zï¿½[ï¿½Wï¿½\ï¿½ï¿½ï¿½Ìƒ^ï¿½Cï¿½}ï¿½[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä‚ï¿½ï¿½ï¿½ï¿½çƒŠï¿½Zï¿½bï¿½gï¿½ï¿½ï¿½ï¿½
             if (_messageCoroutine != null)
             {
                 StopCoroutine(_messageCoroutine);
             }
 
-            // V‚µ‚¢ƒƒbƒZ[ƒW•\¦ƒRƒ‹[ƒ`ƒ“‚ğŠJn
+            // ï¿½Vï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½bï¿½Zï¿½[ï¿½Wï¿½\ï¿½ï¿½ï¿½Rï¿½ï¿½ï¿½[ï¿½`ï¿½ï¿½ï¿½ï¿½ï¿½Jï¿½n
             _messageCoroutine = StartCoroutine(ShowMessageRoutine());
         }
     }
 
-    // š’Ç‰Á: ƒeƒLƒXƒg‚ğ•\¦‚µ‚Ä2•bŒã‚ÉÁ‚·ƒRƒ‹[ƒ`ƒ“
+    // ï¿½ï¿½ï¿½Ç‰ï¿½: ï¿½eï¿½Lï¿½Xï¿½gï¿½ï¿½\ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½2ï¿½bï¿½ï¿½Éï¿½ï¿½ï¿½ï¿½Rï¿½ï¿½ï¿½[ï¿½`ï¿½ï¿½
     private IEnumerator ShowMessageRoutine()
     {
-        // 1. ƒeƒLƒXƒg‚ğ•\¦
+        // 1. ï¿½eï¿½Lï¿½Xï¿½gï¿½ï¿½\ï¿½ï¿½
         outputText.text = message;
 
-        // 2. 2•b‘Ò‚Â
+        // 2. 2ï¿½bï¿½Ò‚ï¿½
         yield return new WaitForSeconds(2.0f);
 
-        // 3. ƒeƒLƒXƒg‚ğÁ‚·
+        // 3. ï¿½eï¿½Lï¿½Xï¿½gï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         outputText.text = "";
         
         _messageCoroutine = null;
+    }
+
+    private void SetupClickSeSource()
+    {
+        if (clickSeSource == null)
+        {
+            clickSeSource = GetComponent<AudioSource>();
+        }
+
+        if (clickSeSource == null)
+        {
+            clickSeSource = gameObject.AddComponent<AudioSource>();
+        }
+
+        clickSeSource.playOnAwake = false;
+        clickSeSource.loop = false;
+    }
+
+    private void PlayClickSe()
+    {
+        if (clickSeSource == null || clickSeClip == null)
+        {
+            return;
+        }
+
+        clickSeSource.PlayOneShot(clickSeClip, Mathf.Clamp01(clickSeVolume));
     }
 }

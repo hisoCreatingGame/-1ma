@@ -41,6 +41,7 @@ public class ScoringContext
     public int NukiDoraCount;        
     
     public int WinningTileId; 
+    public int HonbaCount;
 
     // ★追加: 和了時に有効だった特別役トリガーのリスト
     public List<string> SpecialYakuTriggers = new List<string>();

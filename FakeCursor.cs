@@ -32,7 +32,6 @@ public class FakeCursor : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        // --- 修正箇所 1: 独自のCanvasを設定して最前面に表示する ---
         _myCanvas = GetComponent<Canvas>();
         if (_myCanvas == null)
         {
@@ -41,7 +40,6 @@ public class FakeCursor : MonoBehaviour
         _myCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
         _myCanvas.sortingOrder = sortingOrder;
 
-        // --- 修正箇所 2: カーソル画像がクリックを邪魔しないようにする ---
         if (cursor != null)
         {
             Image cursorImg = cursor.GetComponent<Image>();
@@ -60,40 +58,44 @@ public class FakeCursor : MonoBehaviour
 
     void Update()
     {
-        // ScreenSpaceOverlayなのでマウス座標をそのまま代入でOK
-        cursor.position = Input.mousePosition;
+        // カーソル位置の更新
+        if (cursor != null)
+        {
+            cursor.position = Input.mousePosition;
 
-        // CanvasのSortingOrderが他から変更されないよう監視（念のため）
+            if (Input.GetMouseButtonDown(0))
+                cursor.localScale = Vector3.one * 0.85f;
+
+            if (Input.GetMouseButtonUp(0))
+                cursor.localScale = Vector3.one;
+        }
+
         if (_myCanvas != null && _myCanvas.sortingOrder != sortingOrder)
         {
             _myCanvas.sortingOrder = sortingOrder;
         }
-
-        // クリック演出（任意）
-        if (Input.GetMouseButtonDown(0))
-            cursor.localScale = Vector3.one * 0.85f;
-
-        if (Input.GetMouseButtonUp(0))
-            cursor.localScale = Vector3.one;
     }
 
     IEnumerator TrailRoutine()
     {
+        WaitForSecondsRealtime wait = new WaitForSecondsRealtime(trailInterval); // ポーズ中でも動く待機
+
         while (true)
         {
             CreateTrail();
-            yield return new WaitForSeconds(trailInterval);
+            yield return wait;
         }
     }
 
     void CreateTrail()
     {
+        // ★修正: カーソル自体が非表示なら軌跡も作らない
+        if (cursor != null && !cursor.gameObject.activeInHierarchy) return;
+        
         if (trailPrefab == null || trailParent == null) return;
 
         Image trail = Instantiate(trailPrefab, trailParent);
         trail.rectTransform.position = cursor.position;
-        
-        // --- 修正箇所 3: 軌跡もクリックを邪魔しないようにする ---
         trail.raycastTarget = false;
 
         StartCoroutine(FadeOut(trail));
@@ -103,13 +105,14 @@ public class FakeCursor : MonoBehaviour
     {
         float t = 0f;
         Color c = img.color;
-        // 初期アルファ値を保持するか、0.5f決め打ちかはプレハブ設定に合わせるならimg.color.aを使う
         float startAlpha = c.a > 0 ? c.a : 0.5f;
 
         while (t < trailLifeTime)
         {
-            t += Time.deltaTime;
-            // 徐々に透明に
+            // ★修正: Time.deltaTime だとTimeScale=0の時に止まってしまうため、
+            // unscaledDeltaTime (実時間) を使用する
+            t += Time.unscaledDeltaTime;
+
             c.a = Mathf.Lerp(startAlpha, 0f, t / trailLifeTime);
             img.color = c;
             yield return null;
@@ -118,13 +121,11 @@ public class FakeCursor : MonoBehaviour
         Destroy(img.gameObject);
     }
 
-    // 外部からサイズ変更
     public void SetScale(float scale)
     {
         if(cursor != null) cursor.localScale = Vector3.one * scale;
     }
 
-    // 外部から表示ON/OFF
     public void SetVisible(bool visible)
     {
         if(cursor != null) cursor.gameObject.SetActive(visible);

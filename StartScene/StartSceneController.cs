@@ -6,6 +6,7 @@ public class StartSceneController : MonoBehaviour
 {
     bool isStarting = false;
     [SerializeField] Animator startAnimator;
+    [SerializeField] private string transitionSeKey = SeKeys.StartToLobbyTransition;
 
     public void OnStartButton()
     {
@@ -17,7 +18,8 @@ public class StartSceneController : MonoBehaviour
 
     IEnumerator StartGame()
     {
-        yield return new WaitForSeconds(1.0f);
+        // クリック演出の余韻を少し残しつつ、SEが終わってから遷移
+        yield return StartCoroutine(SeController.PlayAndWait(transitionSeKey, 1.0f));
 
         SceneManager.LoadScene("LobbyScene");
     }

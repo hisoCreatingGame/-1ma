@@ -1,47 +1,65 @@
 using UnityEngine;
 using TMPro;
+using System.Collections; // コルーチン用
 
-// TMP_Text がついているオブジェクトにアタッチするか、
-// Inspectorで TextComponent を指定してください
 public class YakumanCountDisplay : MonoBehaviour
 {
     [Header("表示設定")]
     [SerializeField] private TMP_Text textComponent;
     
-    [Tooltip("表示フォーマット。{0}が解除数、{1}が総数に置換されます")]
-    [SerializeField] private string format = "Unlocked: {0} / {1}";
+    [Tooltip("役満解除数のフォーマット。{0}が解除数、{1}が総数")]
+    [SerializeField] private string yakumanFormat = "実績解除数: {0} / {1}";
 
-    // カウント対象の役満リスト
-    // MahjongGameManager.TargetYakumanList と同じ内容です
+    [Tooltip("ハイスコアのフォーマット。{0}がスコア")]
+    [SerializeField] private string highScoreFormat = "最高得点: {0}";
+
+    [Tooltip("表示切り替え間隔（秒）")]
+    [SerializeField] private float toggleInterval = 4.0f;
+
+    // ★修正: MahjongGameManager.cs で保存しているキー（日本語）に合わせないとロードできません
     private readonly string[] TargetYakumanList = new string[]
     {
-        "KokushiMusou", "Kokushi13Men", 
-        "SuAnko", "SuTan", 
-        "DaiSanGen", 
-        "RyuIso", 
-        "TsuIso", 
-        "ShoSushi", "DaiSushi", 
-        "ChinRoTo", 
-        "SuKantsu", 
-        "ChurenPoto", "JunseiChurenPoto", 
-        "Tenho", "ManNakaTSUYOSHI"
+        "国士無双", "国士無双13面待ち", 
+        "四暗刻", "四暗刻単騎待ち", 
+        "大三元", 
+        "緑一色", 
+        "字一色", 
+        "小四喜", "大四喜", 
+        "清老頭", 
+        "四槓子", 
+        "九蓮宝燈", "純正九蓮宝燈", 
+        "天和", "真ん中強し"
     };
 
     void Start()
     {
-        // アタッチされたコンポーネントを自動取得（設定がなければ）
         if (textComponent == null)
         {
             textComponent = GetComponent<TMP_Text>();
         }
 
-        UpdateDisplay();
+        // コルーチンを開始してループ表示させる
+        StartCoroutine(DisplayLoopRoutine());
+    }
+
+    private IEnumerator DisplayLoopRoutine()
+    {
+        while (true)
+        {
+            // 1. 役満実績数を表示
+            ShowYakumanCount();
+            yield return new WaitForSeconds(toggleInterval);
+
+            // 2. ハイスコアを表示
+            ShowHighScore();
+            yield return new WaitForSeconds(toggleInterval);
+        }
     }
 
     /// <summary>
-    /// 保存データを確認して表示を更新する
+    /// 役満解除数を表示
     /// </summary>
-    public void UpdateDisplay()
+    private void ShowYakumanCount()
     {
         if (textComponent == null) return;
 
@@ -58,8 +76,20 @@ public class YakumanCountDisplay : MonoBehaviour
             }
         }
 
-        // テキストを更新
-        textComponent.text = string.Format(format, unlockedCount, totalCount);
+        textComponent.text = string.Format(yakumanFormat, unlockedCount, totalCount);
+    }
+
+    /// <summary>
+    /// ハイスコアを表示
+    /// </summary>
+    private void ShowHighScore()
+    {
+        if (textComponent == null) return;
+
+        // MahjongCanvas.cs で保存しているキー "HighScore" を読み込む
+        int currentHighScore = PlayerPrefs.GetInt("HighScore", 0);
+
+        textComponent.text = string.Format(highScoreFormat, currentHighScore);
     }
     
     // デバッグ用: リセット機能
@@ -70,8 +100,13 @@ public class YakumanCountDisplay : MonoBehaviour
             string key = "Yakuman_" + yaku;
             PlayerPrefs.DeleteKey(key);
         }
+        // ハイスコアもリセットしたい場合は以下を追加
+        // PlayerPrefs.DeleteKey("HighScore");
+        
         PlayerPrefs.Save();
-        UpdateDisplay();
-        Debug.Log("All Yakuman achievements reset.");
+        Debug.Log("Achievements reset.");
+        
+        // リセット直後の表示更新（コルーチンのタイミングを待たずに即反映したければ）
+        ShowYakumanCount(); 
     }
 }
