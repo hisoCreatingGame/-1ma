@@ -127,56 +127,53 @@ public class MahjongCanvas : MonoBehaviour
         AudioClip voice = null;
         string displayText = "";
 
-        if (yakuName == "��O��")
+        if (yakuName == "大三元")
         {
             voice = GetRandomClip(daisangenGimmickVoices);
-            displayText = "��O���m��";
+            displayText = "大三元確定";
         }
-        else if (yakuName == "��@��")
+        else if (yakuName == "九蓮宝燈")
         {
             voice = GetRandomClip(chuurenGimmickVoices);
-            displayText = "��@�󓕊m��";
+            displayText = "九蓮宝燈確定";
         }
-        else if (yakuName == "��l��")
+        else if (yakuName == "大四喜")
         {
             voice = GetRandomClip(daisushiGimmickVoices);
-            displayText = "��l��m��";
+            displayText = "大四喜確定";
         }
-        else if (yakuName == "�Έ�F")
+        else if (yakuName == "緑一色")
         {
             voice = GetRandomClip(allgreenGimmickVoices);
-            displayText = "�Έ�F�m��";
+            displayText = "緑一色確定";
         }
-        else if (yakuName == "����F")
+        else if (yakuName == "字一色")
         {
             voice = GetRandomClip(tsuisoGimmickVoices);
-            displayText = "����F�m��";
+            displayText = "字一色確定";
         }
-        else if (yakuName == "���m���o")
+        else if (yakuName == "国士無双")
         {
             voice = GetRandomClip(kokushimusouGimmickVoices);
-            displayText = "���m���o�m��";
+            displayText = "国士無双確定";
         }
 
-
-        // �����Đ�
         if (sfxAudioSource != null && voice != null)
         {
             sfxAudioSource.PlayOneShot(voice);
         }
 
-        // �e�L�X�g�ƃp�l���̕\��
         if (gimmickPanel != null && gimmickText != null)
         {
             gimmickText.text = displayText;
             gimmickPanel.SetActive(true);
-
-            // �����̒������i�������Ȃ���΍Œ�2�b�j�\�����đҋ@
             float waitTime = (voice != null) ? voice.length : 2.0f;
             yield return new WaitForSeconds(waitTime);
-
-            // ��\���ɖ߂�
             gimmickPanel.SetActive(false);
+        }
+        else
+        {
+            yield return null;
         }
     }
     public IEnumerator PlayRoundStartAnimation(int roundCount, int honbaCount)
@@ -185,16 +182,16 @@ public class MahjongCanvas : MonoBehaviour
         {
             if (roundNameText != null)
             {
-                string wind = "East";
+                string wind = "東";
                 int number = 1;
-                roundNameText.text = $"{wind} {number} Round";
-                if (roundCountText != null) roundCountText.text = $"{wind} {number} Round";
+                roundNameText.text = $"{wind}{number}局";
+                if (roundCountText != null) roundCountText.text = $"{wind}{number}局";
             }
 
             if (honbaText != null)
             {
-                honbaText.text = $"{honbaCount} Honba";
-                if (roundCountText != null) roundCountText.text += $"\n{honbaCount} Honba";
+                honbaText.text = $"{honbaCount}本場";
+                if (roundCountText != null) roundCountText.text += $"\n{honbaCount}本場";
             }
 
             roundStartPanel.SetActive(true);
@@ -205,7 +202,7 @@ public class MahjongCanvas : MonoBehaviour
         {
             yield return null;
         }
-    }    // MahjongCanvas.cs
+    }
 
     // ��3������ isFaceDown ��ǉ�
     public void PlayImpactSE()
@@ -280,7 +277,7 @@ public class MahjongCanvas : MonoBehaviour
 
             if (remainingTilesText != null && MahjongGameManager.Instance != null)
             {
-                remainingTilesText.text = $"Tiles Left: {MahjongGameManager.Instance.TilesRemainingInWall}";
+                remainingTilesText.text = $"残り牌: {MahjongGameManager.Instance.TilesRemainingInWall}";
             }
         }
     }
@@ -321,10 +318,10 @@ public class MahjongCanvas : MonoBehaviour
     {
         if (resultText == null || resultPanel == null) return;
 
-        string title = isTenpai ? "<color=green>RYUUKYOKU (Tenpai)</color>" : "<color=red>RYUUKYOKU (No-ten)</color>";
-        string info = isTenpai ? "Safe! You can proceed to next round." : "Game Over...";
+        string title = isTenpai ? "<color=green>流局（テンパイ）</color>" : "<color=red>流局（ノーテン）</color>";
+        string info = isTenpai ? "次局へ進めます。" : "ゲームオーバー...";
 
-        resultText.text = $"{title}\n\n{info}\n\n<size=100%>Total Score: {currentScore}</size>";
+        resultText.text = $"{title}\n\n{info}\n\n<size=100%>総得点: {currentScore}</size>";
         ClearContainer(doraContainer);
         ClearContainer(uraDoraContainer);
         if (nextRoundButton != null) nextRoundButton.gameObject.SetActive(isTenpai);
@@ -354,18 +351,17 @@ public class MahjongCanvas : MonoBehaviour
             isNewRecord = true;
         }
 
-        // UI�\���̍X�V
         if (finalScoreText != null)
         {
-            string msg = $"Game Over\nFinal Score: <color=yellow>{finalScore}</color>";
+            string msg = $"ゲームオーバー\n最終スコア: <color=yellow>{finalScore}</color>";
 
             if (isNewRecord)
             {
-                msg += "\n<size=80%><color=red>New High Score!</color></size>";
+                msg += "\n<size=80%><color=red>ハイスコア更新！</color></size>";
             }
             else
             {
-                msg += $"\n<size=70%>(Best: {highScore})</size>";
+                msg += $"\n<size=70%>(ベスト: {highScore})</size>";
             }
 
             finalScoreText.text = msg;
@@ -374,8 +370,7 @@ public class MahjongCanvas : MonoBehaviour
         if (totalCumulativeText != null && MahjongGameManager.Instance != null)
         {
             int yakumanCount = MahjongGameManager.Instance.GetUnlockedYakumanCount();
-            // �𖞎��ѐ��̕\��
-            totalCumulativeText.text = $"Yakuman Collection: <color=orange>{yakumanCount} / 15</color>";
+            totalCumulativeText.text = $"役満コレクション: <color=orange>{yakumanCount} / 15</color>";
         }
 
         gameOverPanel.SetActive(true);
@@ -386,16 +381,19 @@ public class MahjongCanvas : MonoBehaviour
     {
         if (resultText == null || resultPanel == null) return;
 
-        string winnerLabel = (winner != null && winner.IsHuman) ? "YOU" : $"Seat {seat}";
-        string fuText = (fu > 0) ? $"{fu}fu" : "";
-        string hanText = (han > 0) ? $"{han}han" : "";
-        string detail = string.IsNullOrEmpty(scoreName) ? "" : $"\n<size=110%>{scoreName}</size>";
-        resultText.text = $"<color=yellow>{winnerLabel} WIN!</color>{detail}\n\n{hanText} {fuText}\n+{score}\n\n{yakuStr}";
+        string winnerLabel = (winner != null && winner.IsHuman) ? "あなた" : $"プレイヤー{seat}";
+        string scoreNameLine = string.IsNullOrEmpty(scoreName) ? "" : $"<size=120%>{scoreName}</size>\n";
+
+        string hanFuLine = "";
+        if (han > 0 && fu > 0) hanFuLine = $"{han}翻 {fu}符\n";
+        else if (han > 0) hanFuLine = $"{han}翻\n";
+
+        resultText.text = $"<color=yellow>{winnerLabel}の和了！</color>\n{scoreNameLine}{hanFuLine}獲得: +{score}\n\n{yakuStr}";
 
         if (winScoreText != null)
         {
             int totalScore = (MahjongGameManager.Instance != null) ? MahjongGameManager.Instance.CurrentScore : 0;
-            winScoreText.text = $"Total Score: <color=yellow>{totalScore}</color>";
+            winScoreText.text = $"合計スコア: <color=yellow>{totalScore}</color>";
         }
 
         ClearContainer(doraContainer);
@@ -498,7 +496,7 @@ public class MahjongCanvas : MonoBehaviour
             int seat = player.Seat;
             if (seat >= 0 && seat < scoreTexts.Length && scoreTexts[seat] != null)
             {
-                string prefix = (player.IsHuman) ? "<color=yellow>You</color>" : $"P{seat}";
+                string prefix = (player.IsHuman) ? "<color=yellow>あなた</color>" : $"プレイヤー{seat}";
                 scoreTexts[seat].text = $"{prefix}: {player.Score}";
             }
         }
@@ -518,14 +516,14 @@ public class MahjongCanvas : MonoBehaviour
         {
             int shanten = _localPlayer.CurrentShanten;
             string msg = "";
-            if (shanten <= -1) msg = "<color=red>Hola</color>";
-            else if (shanten == 0) msg = "���v";
-            else if (shanten == 1) msg = "1����";
-            else msg = $"{shanten} ����";
+            if (shanten <= -1) msg = "<color=red>アガリ</color>";
+            else if (shanten == 0) msg = "聴牌";
+            else if (shanten == 1) msg = "1向聴";
+            else msg = $"{shanten}向聴";
 
-            if (_localPlayer.IsRiichi) msg += " <color=yellow>[������]</color>";
-            if (_localPlayer.IsRiichiPending) msg += " <color=orange>[Choosing tile to discard]</color>";
-            if (_localPlayer.IsFuriten) msg += "<color=red>�U��</color>";
+            if (_localPlayer.IsRiichi) msg += " <color=yellow>[立直中]</color>";
+            if (_localPlayer.IsRiichiPending) msg += " <color=orange>[捨て牌を選択]</color>";
+            if (_localPlayer.IsFuriten) msg += " <color=red>[振聴]</color>";
 
             statusText.text = msg;
         }
@@ -831,11 +829,11 @@ public class MahjongCanvas : MonoBehaviour
             {
                 GameObject obj = Instantiate(unityroomApiClientPrefab);
                 client = obj.GetComponent<unityroom.Api.UnityroomApiClient>();
-                Debug.Log("<color=green>UnityroomApiClient was instantiated before sending score.</color>");
+                Debug.Log("<color=green>送信前に UnityroomApiClient を生成しました</color>");
             }
             else
             {
-                Debug.LogError("UnityroomApiClient prefab is not assigned.");
+                Debug.LogError("UnityroomApiClient のプレハブが未設定です");
                 return;
             }
         }
@@ -850,11 +848,11 @@ public class MahjongCanvas : MonoBehaviour
         {
             client.SendScore(1, _lastFinalScore, ScoreboardWriteMode.HighScoreDesc);
             client.SendScore(2, yakumanCount, ScoreboardWriteMode.HighScoreDesc);
-            Debug.Log($"Sent Scores -> Board 1: {_lastFinalScore}, Board 2 (Yakuman): {yakumanCount}");
+            Debug.Log($"スコア送信: Board1={_lastFinalScore}, Board2(役満)={yakumanCount}");
         }
 
         if (sendRankingButton != null) sendRankingButton.interactable = false;
-    }    //    private void OnSendRankingClicked()
+    }
     //    {
     //        // ���C��: �����Ȃ� .Instance ���Ă΂��A�܂��͑��݊m�F����
     //        // (Unity 2023�ȍ~�� FindAnyObjectByType, ����ȑO�� FindObjectOfType)
@@ -1016,6 +1014,7 @@ public class MahjongCanvas : MonoBehaviour
         if (blackPanel != null) blackPanel.SetActive(false);
     }
 }
+
 
 
 
