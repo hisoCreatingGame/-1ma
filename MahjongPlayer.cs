@@ -1292,7 +1292,7 @@ public void OnTileDragging(MahjongTile tile, float mouseWorldX)
     private IEnumerator AutoDiscardRoutine()
     {
         _hasAutoDiscarded = true; 
-        yield return new WaitForSeconds(1.0f);
+        yield return new WaitForSeconds(0.5f);
         if (TsumoTile != null && CurrentShanten > -1) RequestDiscard(TsumoTile);
     }
 
