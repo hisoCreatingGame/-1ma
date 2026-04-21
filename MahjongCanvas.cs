@@ -411,15 +411,15 @@ public class MahjongCanvas : MonoBehaviour
         // UI表示の更新
         if (finalScoreText != null)
         {
-            string msg = $"Game Over\nFinal Score: <color=yellow>{finalScore}</color>";
+            string msg = $"<size=200%>流局</size>\n\n最終スコア\n<size=20%> </size>\n<size=120%><color=yellow>{finalScore}</color></size>";
 
             if (isNewRecord)
             {
-                msg += "\n<size=80%><color=red>New High Score!</color></size>";
+                msg += "\n<size=20%> </size>\n<size=80%><color=red>New High Score!</color></size>";
             }
             else
             {
-                msg += $"\n<size=70%>(Best: {highScore})</size>";
+                msg += $"\n<size=20%> </size>\n<size=70%>(Best: {highScore})</size>";
             }
 
             finalScoreText.text = msg;
@@ -429,7 +429,7 @@ public class MahjongCanvas : MonoBehaviour
         {
             int yakumanCount = MahjongGameManager.Instance.GetUnlockedYakumanCount();
             // 役満実績数の表示
-            totalCumulativeText.text = $"Yakuman Collection: <color=orange>{yakumanCount} / 15</color>";
+            totalCumulativeText.text = $"役満実績解除数\n<size=20%> </size>\n<size=150%><color=orange>{yakumanCount} / 15</color></size>";
         }
 
         gameOverPanel.SetActive(true);
