@@ -120,6 +120,14 @@ public class MahjongCanvas : MonoBehaviour
     {
         StartCoroutine(GimmickAnnouncementRoutine(yakuName));
     }
+    public void PlayCenterStrongAnnouncement()
+    {
+        SeController se = SeController.GetOrFindInstance();
+        if (se != null)
+        {
+            se.Play(SeKeys.GameYakumanPreVideoImage);
+        }
+    }
 
     // ★追加: 音声の長さに合わせてテキストを表示するコルーチン
     private IEnumerator GimmickAnnouncementRoutine(string yakuName)

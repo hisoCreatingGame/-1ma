@@ -80,6 +80,7 @@ public class MahjongPlayer : MonoBehaviour
     // ★追加: 確定した役満を保持するリストと、1巡1回の制限フラグ
     public HashSet<string> GuaranteedYakuman { get; private set; } = new HashSet<string>();
     private bool _gimmickTriggeredThisTurn = false;
+    private bool _wasCenterStrongActive = false;
     public void Initialize(int seatIndex, bool isHuman, int initialScore)
     {
         Seat = seatIndex;
@@ -98,6 +99,7 @@ public class MahjongPlayer : MonoBehaviour
         _isFirstTurn = true;
         _cachedRiichiWaits = null; // 初期化
         _isDiscardProcessing = false;
+        _wasCenterStrongActive = false;
 
         GuaranteedYakuman.Clear();
         
@@ -727,16 +729,30 @@ public class MahjongPlayer : MonoBehaviour
     private void CheckCurrentTriggers()
     {
         ActiveSpecialTriggers.Clear();
+        bool isCenterStrong = false;
 
-        if (HandTiles == null || HandTiles.Count == 0) return;
-
-        if (HandTiles.Count > 0 && HandTiles[0] != null)
+        if (HandTiles != null && HandTiles.Count > 0 && HandTiles[0] != null)
         {
-            if (HandTiles[(HandTiles.Count - 1) >> 1].TileId == 33)
+            int centerIndex = (HandTiles.Count - 1) >> 1;
+            MahjongTile centerTile = HandTiles[centerIndex];
+            if (centerTile != null && GetNormalizedTileId(centerTile.TileId) == 33)
             {
+                isCenterStrong = true;
                 ActiveSpecialTriggers.Add("真ん中強し");
             }
         }
+
+        // 「中を中央に置いた瞬間」だけ1回、確定演出を再生する
+        if (isCenterStrong && !_wasCenterStrongActive)
+        {
+            var canvas = FindAnyObjectByType<MahjongCanvas>();
+            if (canvas != null)
+            {
+                canvas.PlayCenterStrongAnnouncement();
+            }
+        }
+
+        _wasCenterStrongActive = isCenterStrong;
     }
 
     public List<string> GetActiveTriggersForWin()
